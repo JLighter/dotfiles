@@ -5,4 +5,3 @@
 local map = LazyVim.safe_keymap_set
 
 map("n", "<leader>/", ":vsplit<CR>", { desc = "Split window right", remap = true, silent = true })
-map("n", "<leader>-", ":split<CR>", { desc = "Split window bottom", remap = true, silent = true })

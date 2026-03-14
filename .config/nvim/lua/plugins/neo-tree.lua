@@ -11,6 +11,7 @@ return {
     sort_case_insensitive = false, -- used when sorting files and directories in the tree
     window = {
       mappings = {
+        ["<tab>"] = { "toggle_node", nowait = true },
         ["P"] = { "toggle_preview", config = { use_float = false } },
         ["y"] = { "copy", nowait = true },
         ["c"] = { "copy_to_clipboard", nowait = true },
@@ -22,6 +23,32 @@ return {
         ["on"] = "none",
         ["os"] = "none",
         ["ot"] = "none",
+        ["/"] = "noop",
+        ["D"] = "noop",
+      },
+    },
+    nesting_rules = {
+      ["js"] = { "js.map" },
+      ["ts"] = {
+        pattern = "(.+)%.ts$",
+        files = { "%1.spec.ts" },
+      },
+      ["package.json"] = {
+        pattern = "^package%.json$", -- <-- Lua pattern
+        files = { "package-lock.json", "yarn*" }, -- <-- glob pattern
+      },
+      ["go"] = {
+        pattern = "(.*)%.go$", -- <-- Lua pattern with capture
+        files = { "%1_test.go" }, -- <-- glob pattern with capture
+      },
+      ["js-extended"] = {
+        pattern = "(.+)%.js$",
+        files = { "%1.js.map", "%1.min.js", "%1.d.ts" },
+      },
+      ["docker"] = {
+        pattern = "^dockerfile$",
+        ignore_case = true,
+        files = { ".dockerignore", "docker-compose.*", "dockerfile*" },
       },
     },
     filesystem = {
@@ -29,19 +56,25 @@ return {
       group_empty_dirs = false, -- group empty directories first
       follow_current_file = {
         enabled = true,
-        leave_dirs_open = true
-      }
+        leave_dirs_open = true,
+      },
     },
     buffers = {
       follow_current_file = {
         enabled = true,
-        leave_dirs_open = true
-      }
+        leave_dirs_open = true,
+      },
     },
     source_selector = {
       winbar = false,
       statusline = false,
       document_symbols = false,
+      sources = {
+        {
+          source = "filesystem",
+          display_name = " 󰉓 Files ",
+        },
+      },
     },
   },
   config = function(_, opts)

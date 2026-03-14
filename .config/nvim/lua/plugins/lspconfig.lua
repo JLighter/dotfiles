@@ -19,7 +19,7 @@ return {
       ---@type lspconfig.options
       servers = {
         -- pyright will be automatically installed with mason and loaded with lspconfig
-        pyright = {},
+        -- pyright = {},
         bufls = {},
         cssls = {
           settings = {
@@ -45,23 +45,17 @@ return {
         },
         angularls = {
           root_dir = function(filename, bufnr)
-            return util.root_pattern("angular.json")(filename) or util.root_pattern("project.json")(filename)
+            return util.root_pattern("angular.json")(filename)
+              or util.root_pattern("package.json")(filename)
+              or util.root_pattern("project.json")(filename)
+              or util.root_pattern("nx.json")(filename)
+              or util.find_git_ancestor(filename)
+              or util.path.dirname(filename)
           end,
         },
       },
       diagnostics = {
         virtual_text = false,
-      },
-    },
-  },
-  {
-    "mfussenegger/nvim-jdtls",
-    opts = {
-      jdtls = {
-        handlers = {
-          ["language/status"] = function(_, result) end,
-          ["$/progress"] = function(_, result, ctx) end,
-        },
       },
     },
   },

@@ -1,6 +1,6 @@
 return {
-  "TimUntersberger/neogit",
-  branch = "master",
+  "fang2hou/neogit",
+  branch = "feature/snacks-integration",
   cmd = { "Neogit" },
   keys = {
     { "<leader>gs", ":Neogit <CR>", desc = "Status", mode = "n", nowait = true, silent = true },
@@ -12,19 +12,11 @@ return {
     { "<leader>gdf", ":DiffviewToggleFiles <CR>", desc = "Toggle files", mode = "n", nowait = true, silent = true },
     { "<leader>ghs", ":Git stage_hunk <CR>", desc = "Stage", mode = "v", nowait = true, silent = true },
     { "<leader>ghr", ":Git stage_hunk <CR>", desc = "Reset", mode = "v", nowait = true, silent = true },
-    {
-      "-",
-      ":Neotree show reveal_force_cwd position=current<CR>",
-      desc = "Open Neotree",
-      mode = "n",
-      nowait = true,
-      silent = true,
-    },
   },
   dependencies = {
     { "nvim-lua/plenary.nvim" },
     { "sindrets/diffview.nvim" },
-    { "nvim-telescope/telescope.nvim" },
+    -- { "folke/snacks.nvim" },
   },
   opts = {
     graph_style = "unicode",
@@ -58,9 +50,6 @@ return {
         ["<2-LeftMouse>"]      = "NOP",
       },
     },
-    telescope_sorter = function()
-      return require("telescope").extensions.fzf.native_fzf_sorter()
-    end,
     -- Automatically show console if a command takes more than console_timeout milliseconds
     console_timeout = 10000,
     auto_show_console = true,
@@ -72,7 +61,7 @@ return {
       hunk = { "", "" },
     },
     integrations = {
-      telescope = true,
+      -- snacks = true,
       diffview = true,
     },
   },

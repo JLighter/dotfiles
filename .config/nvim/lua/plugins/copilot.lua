@@ -21,5 +21,7 @@ return {
     })
 
     command:map("<leader>uO")
+
+    command:set(true)
   end,
 }

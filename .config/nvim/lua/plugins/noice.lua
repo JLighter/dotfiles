@@ -1,11 +1,15 @@
 return {
   "folke/noice.nvim",
   opts = {
+    popupmenu = {
+      enabled = false,
+      backend = "cmp"
+    },
     cmdline = {
       enabled = true, -- enables the Noice cmdline UI
       view = "cmdline", -- view for rendering the cmdline. Change to `cmdline` to get a classic cmdline at the bottom
       opts = {}, -- global options for the cmdline. See section on views
-      ---@type table<string, CmdlineFormat>
+      ---@type table<string, any>
       format = {
         cmdline = { pattern = "^:", icon = " ", lang = "vim" },
         search_down = { kind = "search", pattern = "^/", icon = "  ", lang = "regex" },
@@ -15,6 +19,16 @@ return {
         help = { pattern = "^:%s*he?l?p?%s+", icon = " 󰋗" },
         calculator = { pattern = "^=", icon = " ", lang = "vimnormal" },
         increname = { pattern = "^:IncRename", icon = " 󱈄", lang = "viminsert" },
+      },
+    },
+    lsp = {
+      message = {
+        enabled = false
+      },
+      override = {
+        ["vim.lsp.util.convert_input_to_markdown_lines"] = true,
+        ["vim.lsp.util.stylize_markdown"] = true,
+        ["cmp.entry.get_documentation"] = true, -- requires hrsh7th/nvim-cmp
       },
     },
     presets = {
