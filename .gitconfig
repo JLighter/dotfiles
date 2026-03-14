@@ -1,17 +1,11 @@
 [user]
 	email = heroguelle.julien@gmail.com
 	name = JLighter
+[daemon]
+  receivepack = true
 [alias]
 	quickshare = daemon --verbose --export-all --base-path=.git --reuseaddr --strict-paths .git/
   quickopen = daemon --verbose --export-all --base-path=.git --reuseaddr --strict-paths .git/ --enable=receive-pack
-[daemon]
-  receivepack = true
-[http]
-	sslverify = true
-[core]
-	autocrlf = input
-[pull]
-	rebase = true
 [credential]
 	helper = store
 [filter "lfs"]
@@ -19,3 +13,48 @@
 	required = true
 	clean = git-lfs clean -- %f
 	smudge = git-lfs smudge -- %f
+[column]
+  ui = auto
+[branch]
+  sort = -committerdate
+[tag]
+  sort = version:refname
+[init]
+  defaultBranch = main
+[diff]
+  algorithm = histogram
+  colorMoved = true
+  mnemonicPrefix = true
+  renames = true
+[push]
+  default = simple
+  autoSetupRemote = true
+  followTags = true
+[fetch]
+  prune = true
+  pruneTags = true
+  all = true
+[feature]
+  experimental = false
+[grep]
+  patternType = perl
+[help]
+  autocorrect = prompt
+[commit]
+  verbose = true
+[rerere]
+  enabled = true
+  autoupdate = true
+[core]
+  excludesfile = ~/.gitignore
+	autocrlf = input
+[rebase]
+  autoSquash = true
+  autoStash = true
+  updateRefs = true
+[pull]
+	rebase = true
+[merge]
+  conflictstyle = zdiff3
+[url "git@gitlab-stackinsat:stackinsat/"]
+	insteadOf = git@gitlab.com:stackinsat/
