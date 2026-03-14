@@ -58,13 +58,6 @@ fi
 alias r='ranger'
 
 # ----------------------
-# Bat
-# ----------------------
-if command -v bat &>/dev/null; then
-  alias cat='bat --color=always'
-fi
-
-# ----------------------
 # Eza
 # ----------------------
 if command -v bat &>/dev/null; then
