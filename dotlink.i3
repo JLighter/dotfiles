@@ -13,3 +13,4 @@
 .config/tmuxinator,.config/tmuxinator
 .hushlogin,.hushlogin
 .config/ghostty,.config/ghostty
+.claude,.claude
