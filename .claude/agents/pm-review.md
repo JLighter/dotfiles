@@ -1,7 +1,7 @@
 ---
 name: pm-review
 description: PM documentation orchestrator. Coordinates discovery, writing, and review of product documentation in docs/ folder. Supports three modes — init (create docs from scratch), update (refresh from code changes), and audit (check coherence). Use when product documentation needs to be created, maintained, or verified.
-tools: Read, Grep, Glob, Bash, Agent, Write, Edit
+tools: Read, Grep, Glob, Bash, Agent
 model: haiku
 maxTurns: 30
 ---
