@@ -9,7 +9,8 @@
 - `/audit-project` to get a full health report of the codebase.
 - `/security-scan` for a deep security audit (data flow tracing, adversarial validation, patches).
 - `/adr` to reason through architectural decisions before implementing.
-- `/new-feature` to spec a feature before implementing.
+- `/new-feature` to spec a feature (epic, stories, AC, business rules).
+- `/backlog` to see the live product dashboard (progress, blockers, priorities).
 - `/implement-feature` to code a feature guided by docs/.
 - `/review-feature` to review changes (auto-detects the right agents).
 - `/review-all` to run all review agents in parallel.
@@ -26,6 +27,12 @@
 - After modifying pipelines (CI/CD) → /cicd-review
 - After modifying documentation → /review-docs
 - Before a release or pentest → /security-scan full
+
+## Product Backlog
+- Epics in `docs/product/epics/`, stories in `docs/product/stories/`.
+- Every story has Given/When/Then acceptance criteria + non-functional criteria.
+- Definition of Done in `docs/product/definition-of-done.md`.
+- Use `/backlog` to check progress, `/backlog ready` to see what to start next.
 
 ## Documentation
 - Product documentation lives in `docs/` at the project root.
