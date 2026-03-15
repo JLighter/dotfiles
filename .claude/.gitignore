@@ -1,0 +1,30 @@
+# Claude Code internal state — do not version
+backups/
+cache/
+chrome/
+debug/
+downloads/
+file-history/
+ide/
+logs/
+paste-cache/
+plans/
+plugins/
+projects/
+session-env/
+sessions/
+shell-snapshots/
+statsig/
+tasks/
+telemetry/
+todos/
+
+# History and stats
+history.jsonl
+stats-cache.json
+
+# Settings backup
+settings.json.bak
+
+# OS files
+.DS_Store
