@@ -7,21 +7,25 @@
 ## Project Lifecycle
 - `/init-project` to bootstrap a new project (rules, CLAUDE.md, docs/).
 - `/audit-project` to get a full health report of the codebase.
+- `/security-scan` for a deep security audit (data flow tracing, adversarial validation, patches).
 - `/adr` to reason through architectural decisions before implementing.
 - `/new-feature` to spec a feature before implementing.
 - `/implement-feature` to code a feature guided by docs/.
 - `/review-feature` to review changes (auto-detects the right agents).
 - `/review-all` to run all review agents in parallel.
 - `/review-docs` to check documentation coherence against code.
+- `/next-move` to get the most relevant next action.
+- `/easter-egg` to celebrate quality with a personal touch.
 
 ## Review Strategy
-- After modifying backend/logic code → /code-review
+- After modifying backend/logic code → /code-review (includes security scan)
 - After modifying frontend components/styles → /ux-review + /css-review
 - After modifying CSS/tokens/tailwind config → /css-review
 - After modifying domain/architecture code → /ddd-review
 - After modifying IaC (Terraform, Docker, Helm) → /infra-review
 - After modifying pipelines (CI/CD) → /cicd-review
 - After modifying documentation → /review-docs
+- Before a release or pentest → /security-scan full
 
 ## Documentation
 - Product documentation lives in `docs/` at the project root.
