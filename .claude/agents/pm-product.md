@@ -16,6 +16,7 @@ All product artifacts live in `docs/product/`:
 docs/product/
 ├── brief.md              ← Product vision and goals
 ├── personas.md           ← User personas
+├── definition-of-done.md ← DoD (project-level, all stories must meet)
 ├── epics/
 │   ├── EP-001-payment.md
 │   └── EP-002-onboarding.md
@@ -91,6 +92,15 @@ As a [persona], I want to [action] so that [benefit].
 | 3 | I filled an invalid card number | I click "Save" | I see an inline error "Invalid card number" | — |
 | 4 | I have a saved card | I return to checkout | My saved card is pre-selected | — |
 
+## Non-functional criteria
+
+| Category | Requirement | Threshold |
+|----------|------------|-----------|
+| Performance | API response time | < 200ms p95 |
+| Security | Input validation | All user inputs validated |
+
+(Include only categories relevant to this story.)
+
 ## Technical notes
 - Bounded context: [from glossary]
 - Business rules: [BR-NNN references]
@@ -103,6 +113,76 @@ As a [persona], I want to [action] so that [benefit].
 ## Dependencies
 - [Other stories or systems this depends on]
 ```
+
+## Definition of Done (project-level)
+
+The DoD is defined once per project in `docs/product/definition-of-done.md`. Every story must meet ALL these criteria to be marked `done`. If the file does not exist, create it on first use with these defaults:
+
+```markdown
+---
+title: Definition of Done
+last_reviewed: YYYY-MM-DD
+---
+
+A story is **done** when ALL of the following are true:
+
+### Functional
+- [ ] All acceptance criteria pass (happy AND sad paths).
+- [ ] No known bugs introduced.
+
+### Code quality
+- [ ] Code reviewed (or `/review-feature` run with zero critical findings).
+- [ ] No new technical debt introduced without an explicit ADR.
+
+### Testing
+- [ ] Unit tests cover the new behavior.
+- [ ] Integration tests cover the critical path.
+- [ ] Tests pass in CI.
+
+### Security
+- [ ] No new vulnerabilities (or `/security-scan` run on changed files).
+- [ ] No hardcoded secrets or credentials.
+
+### Accessibility
+- [ ] Keyboard navigable (if frontend).
+- [ ] Screen reader compatible (if frontend).
+- [ ] WCAG AA contrast (if frontend).
+
+### Documentation
+- [ ] Domain glossary updated if new terms introduced.
+- [ ] Business rules updated if new invariants.
+- [ ] API documentation updated if endpoints changed.
+
+### Deployment
+- [ ] Feature flag in place (if gradual rollout needed).
+- [ ] Rollback path identified.
+```
+
+Adapt this template to the project. Remove irrelevant items (e.g., accessibility for a CLI tool, deployment for a library). The DoD should fit on one screen.
+
+## Non-functional requirements (per story)
+
+Every story MUST include a non-functional criteria section. These are checked alongside the functional AC:
+
+```markdown
+## Non-functional criteria
+
+| Category | Requirement | Threshold |
+|----------|------------|-----------|
+| Performance | Page load / API response time | < 200ms p95 (or project default) |
+| Accessibility | WCAG compliance level | AA (or project default) |
+| Security | Input validation at boundary | All user inputs validated |
+| Security | No sensitive data in logs | — |
+| Browser support | Tested on target browsers | Per docs/design/browser-matrix.md |
+| Responsive | Works on mobile breakpoint | Per design system breakpoints |
+| i18n | Strings externalized | If project uses i18n |
+```
+
+Rules for non-functional criteria:
+- Only include categories relevant to the story. A backend story has no accessibility or responsive criteria.
+- Use project defaults from `docs/` when they exist (browser-matrix.md, design-system.md, constraints.md).
+- If no project defaults exist, use sensible industry defaults.
+- Non-functional criteria are pass/fail, not negotiable per story. They come from the DoD.
 
 ## Writing conventions
 
