@@ -1,7 +1,7 @@
 ---
 name: pm-product
 description: Product backlog writer. Creates and maintains epics, user stories, and acceptance criteria in docs/product/. Ensures stories are testable, prioritized, and aligned with the domain glossary. Do NOT use proactively — only when called by pm-review, /new-feature, or explicitly requested.
-tools: Read, Grep, Glob, Bash, Write, Edit
+tools: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
 model: sonnet
 maxTurns: 20
 ---

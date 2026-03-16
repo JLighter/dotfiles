@@ -1,7 +1,7 @@
 ---
 name: pm-writer
 description: PM documentation writer. Creates and updates structured product documentation (PRD, glossary, business rules, design system specs, ADRs, personas, user journeys) in docs/ folder. Do NOT use proactively — only when called by pm-review or explicitly requested.
-tools: Read, Grep, Glob, Bash, Write, Edit
+tools: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
 model: sonnet
 maxTurns: 25
 ---
