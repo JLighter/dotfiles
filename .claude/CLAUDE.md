@@ -11,7 +11,9 @@
 - `/adr` to reason through architectural decisions before implementing.
 - `/new-feature` to spec a feature (epic, stories, AC, business rules).
 - `/backlog` to see the live product dashboard (progress, blockers, priorities).
-- `/implement-feature` to code a feature guided by docs/.
+- `/generate-tests` to create failing tests from AC (BDD Red phase).
+- `/implement-feature` to make failing tests pass (BDD Green phase).
+- `/refactor` to improve code while keeping tests green (BDD Refactor phase).
 - `/review-feature` to review changes (auto-detects the right agents).
 - `/review-all` to run all review agents in parallel.
 - `/review-docs` to check documentation coherence against code.

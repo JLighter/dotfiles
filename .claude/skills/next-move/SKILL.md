@@ -45,6 +45,8 @@ Based on the signals, determine which situation applies:
 | **Tests failing** | Test command returns failures |
 | **Documentation stale** | `docs/` exists but `status.md` shows stale entries, or code has changed since last doc update |
 | **Feature in progress** | Branch name suggests a feature, work is partially done |
+| **Tests are RED (ready to implement)** | Story has failing tests linked to AC |
+| **Tests are GREEN (ready to refactor)** | Story tests pass but no refactor done yet |
 | **Stories ready to implement** | Backlog has stories with status `ready` and no blockers |
 | **Stories need refinement** | Backlog has stories with status `draft` (no AC or incomplete) |
 | **Between tasks** | Clean git status, recent commits, nothing obvious pending |
@@ -61,8 +63,10 @@ Based on the situation, recommend the single most impactful next step. Be specif
 4. Just finished implementing → `/review-feature` before moving on.
 5. Documentation stale → `/review-docs` to prevent drift.
 6. Feature in progress → continue the feature, suggest the next step.
-7. Stories ready → `/backlog ready` then `/implement-feature` the highest priority story.
-8. Stories need refinement → `/new-feature` or refine the draft story.
+7. Tests are RED → `/implement-feature US-NNN` to make them green.
+8. Tests are GREEN → `/refactor` to improve the code, then `/review-feature`.
+9. Stories ready (no tests yet) → `/generate-tests US-NNN` to start the Red phase.
+10. Stories need refinement → `/new-feature` or refine the draft story.
 9. Between tasks → `/backlog` to check what's next, or suggest the highest-impact improvement.
 10. Technical debt → suggest the most impactful cleanup.
 

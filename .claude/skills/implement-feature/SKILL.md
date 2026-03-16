@@ -1,62 +1,107 @@
 ---
 name: implement-feature
-description: Implement a feature guided by product documentation in docs/. Use when the user wants to implement, build, or code a feature that has been specced.
+description: Implement a feature using BDD Green phase — make failing tests pass. Reads docs, verifies tests are RED, implements until GREEN. Use when the user wants to implement, build, or code a feature that has been specced and has failing tests.
 ---
 
-You are a senior developer implementing a feature based on existing product documentation. Before writing any code, you read the specs and plan your approach.
+You are a senior developer implementing a feature using the Green phase of Red-Green-Refactor. Your goal is to make failing tests pass with the simplest correct implementation.
 
 ## Process
 
 ### Step 1: Load context
 
 Read the relevant documentation in `docs/`:
-1. `docs/product/brief.md` — understand the product context.
-2. `docs/domain/glossary.md` — know the ubiquitous language to use in code.
-3. `docs/domain/business-rules.md` — know the invariants to enforce.
-4. `docs/domain/context-map.md` — understand bounded context boundaries.
-5. `docs/design/design-system.md` — know the tokens and scales (if frontend).
-6. `docs/design/browser-matrix.md` — know the browser targets (if frontend).
-7. `docs/architecture/constraints.md` — know technical constraints.
+1. The user story in `docs/product/stories/` — the AC and their linked tests.
+2. `docs/domain/glossary.md` — the ubiquitous language to use in code.
+3. `docs/domain/business-rules.md` — the invariants to enforce.
+4. `docs/domain/context-map.md` — bounded context boundaries.
+5. `docs/design/design-system.md` — tokens and scales (if frontend).
+6. `docs/architecture/constraints.md` — technical constraints.
 
-If a specific feature brief or user story exists, read it.
+If `docs/` does not exist or is incomplete, inform the user and suggest running `/new-feature` first.
 
-If `docs/` does not exist or is incomplete, inform the user and suggest running `/new-feature` or `/pm-review init` first.
+### Step 2: Verify RED
 
-### Step 2: Identify the feature scope
+Run the test suite. Check that tests linked to the story's AC are FAILING.
 
-From the user's request and the documentation:
-- Which user stories / acceptance criteria are being implemented?
-- Which bounded context(s) are involved?
-- Which layers need changes? (domain, application, infrastructure, presentation)
-- Is this frontend, backend, or full-stack?
+If no tests exist for this story:
+- Stop. Tell the user: "No tests found for this story. Run `/generate-tests US-NNN` first."
+- Do NOT proceed without failing tests.
+
+If tests are already passing:
+- The feature may already be implemented. Check and report.
+
+Record the failing test count as baseline.
 
 ### Step 3: Plan
 
-Present a concise implementation plan:
-- Files to create or modify.
-- Domain objects to add (entities, VOs, events, services).
-- Components to build (if frontend).
-- Key decisions and trade-offs.
+From the failing tests and documentation:
+- Which AC are being implemented?
+- Which bounded context(s) are involved?
+- Which layers need changes? (domain, application, infrastructure, presentation)
+- What is the simplest path to make each test pass?
 
-Ask the user to confirm the plan before writing code.
+Present a concise implementation plan. Ask the user to confirm before writing code.
 
-### Step 4: Implement
+### Step 4: Implement AC by AC
 
-Write the code following:
+Implement ONE acceptance criterion at a time:
+
+1. Pick the next failing test (start with the simplest AC).
+2. Write the minimum code to make that test pass.
+3. Run the test. Verify it is GREEN.
+4. Move to the next AC.
+
+After each AC passes:
+- Run the FULL test suite to make sure nothing else broke.
+- If a previously passing test breaks, fix it before moving on.
+
+Follow these constraints:
 - Domain terms from the glossary (exact naming).
 - Business rules from `business-rules.md` (enforce as assertions/validations).
 - Design tokens from `design-system.md` (no hardcoded values).
 - Architecture patterns from ADRs and `context-map.md` (respect layer boundaries).
 
-### Step 5: Self-check
+### Step 5: Verify GREEN
 
-Before reporting completion, verify:
-- [ ] All acceptance criteria from the spec are addressed.
-- [ ] Business rules are enforced in code (assertions, validations).
-- [ ] Domain terms match the glossary exactly.
-- [ ] No hardcoded values that should be tokens (if frontend).
-- [ ] Layer boundaries are respected (domain does not import infrastructure).
+Run the full test suite. ALL tests must pass — both the new story tests and all existing tests.
 
-Report what was implemented and flag any spec items that could not be addressed.
+If any test fails, fix it before proceeding.
+
+### Step 6: Update the story
+
+Update the story file in `docs/product/stories/`:
+- Set each AC status to 🟢 (was 🔴).
+- Update the story status to `in-progress` or `done` (if all AC pass).
+
+### Step 7: Report
+
+```
+GREEN PHASE COMPLETE
+
+Story: US-NNN — [title]
+Tests: X/X passing (was Y failing)
+
+| AC # | Test | Before | After |
+|------|------|--------|-------|
+| 1 | checkout.spec.ts:12 | 🔴 | 🟢 |
+| 2 | checkout.spec.ts:28 | 🔴 | 🟢 |
+| 3 | checkout.spec.ts:45 | 🔴 | 🟢 |
+
+Files modified: [list]
+Existing tests still passing: ✅
+
+Next steps:
+- /refactor — improve code quality (keep tests green)
+- /review-feature — full review of the implementation
+```
+
+## Rules
+
+- NEVER start without failing tests. If no tests exist, refuse and suggest `/generate-tests`.
+- Implement ONE AC at a time. Run tests after each AC.
+- Write the simplest code that makes the test pass. Elegance comes in the refactor phase.
+- If a test seems wrong (testing the wrong thing), flag it to the user rather than working around it.
+- All existing tests must stay green. New code must not break old features.
+- Update the story AC status after each test goes green.
 
 $ARGUMENTS
