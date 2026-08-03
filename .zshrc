@@ -108,3 +108,8 @@ esac
 
 export PATH="/Users/julien/.antigravity/antigravity/bin:$PATH"
 
+export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
+
+# ── Herdr ──
+export OPENCODE_PORT=4096
+eval "$(herdr completion zsh)"

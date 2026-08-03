@@ -1,0 +1,102 @@
+# ════════════════════════════════════════════════════════════
+# Herdr — configuration migrée depuis ~/.tmux.conf
+# Défauts complets : `herdr --default-config`
+# Recharger : prefix+shift+R ou `herdr server reload-config`
+# ════════════════════════════════════════════════════════════
+
+[theme]
+# Catppuccin, comme dans tmux. auto_switch suit le thème clair/sombre du
+# terminal hôte (Ghostty window-theme = auto) — remplace les hooks tmux
+# client-dark-theme / client-light-theme + reload-theme.sh.
+name = "catppuccin"
+auto_switch = true
+dark_name = "catppuccin"
+light_name = "catppuccin-latte"
+
+[keys]
+# Même prefix que dans tmux (C-space au lieu du C-b par défaut de herdr).
+prefix = "ctrl+space"
+
+# Splits : mêmes touches que dans tmux — « / » côte à côte, « - » empilé.
+# Le cwd suit le pane courant (new_cwd = "follow", défaut) — équivalent
+# de -c "#{pane_current_path}".
+split_vertical = "prefix+/"
+split_horizontal = "prefix+minus"
+
+# Worktrees : ouvrir / retirer un workspace adossé à un git worktree
+# (créer = prefix+shift+G, défaut — un agent par branche, en parallèle).
+open_worktree = "prefix+shift+o"
+remove_worktree = "prefix+shift+minus"
+
+# Onglets en accès direct : alt+1..9 (en plus du prefix+1..9 par défaut).
+# Sous Ghostty/macOS, ne répond que si la touche Option envoie Alt
+# (macos-option-as-alt) — sinon prefix+1..9 reste la voie normale.
+[keys.indexed]
+tabs = "alt"
+
+# ── Navigation vim-like ctrl+h/j/k/l (plugin vim-herdr-navigation) ────
+# Bindings directs (sans prefix) vers le plugin : si le pane focalisé
+# exécute (n)vim, la touche lui est transmise (splits vim) et vim rappelle
+# herdr au bord d'un split ; sinon herdr change de pane directement.
+# prefix+h/j/k/l (défaut) reste disponible en secours.
+[[keys.command]]
+key = "ctrl+h"
+type = "plugin_action"
+command = "vim-herdr-navigation.left"
+description = "navigate left (vim/herdr)"
+
+[[keys.command]]
+key = "ctrl+j"
+type = "plugin_action"
+command = "vim-herdr-navigation.down"
+description = "navigate down (vim/herdr)"
+
+[[keys.command]]
+key = "ctrl+k"
+type = "plugin_action"
+command = "vim-herdr-navigation.up"
+description = "navigate up (vim/herdr)"
+
+[[keys.command]]
+key = "ctrl+l"
+type = "plugin_action"
+command = "vim-herdr-navigation.right"
+description = "navigate right (vim/herdr)"
+
+# ── Popups (équivalent display-popup de tmux) ─────────────────────────
+[[keys.command]]
+key = "prefix+f"
+type = "popup"
+command = "yazi"
+width = "85%"
+height = "85%"
+
+[[keys.command]]
+key = "prefix+m"
+type = "popup"
+command = "btop"
+width = "90%"
+height = "90%"
+
+[worktrees]
+directory = "~/.herdr/worktrees"
+
+[ui]
+# "priority" : les agents qui attendent une réponse remontent en tête de
+# sidebar (file d'attention) — l'équivalent du glyphe jaune de l'ex-config tmux.
+agent_panel_sort = "priority"
+
+# Barre d'onglets masquée quand le workspace n'a qu'un onglet.
+hide_tab_bar_when_single_tab = true
+
+show_agent_labels_on_pane_borders = true
+[ui.toast]
+# Notifications de bureau relayées au terminal hôte (Ghostty) — remplace
+# allow-passthrough de tmux pour les notifications Claude Code.
+delivery = "terminal"
+
+[experimental]
+switch_ascii_input_source_in_prefix = true
+# Restaure le contenu affiché des panes après un redémarrage complet du
+# serveur (complète resume_agents_on_restore, actif par défaut).
+pane_history = true

@@ -13,3 +13,5 @@
 .hushlogin,.hushlogin
 .config/ghostty,.config/ghostty
 .claude,.claude
+.config/herdr/config.toml,.config/herdr/config.toml
+.config/herdr/workspaces,.config/herdr/workspaces
