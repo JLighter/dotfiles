@@ -28,6 +28,12 @@ split_horizontal = "prefix+minus"
 open_worktree = "prefix+shift+o"
 remove_worktree = "prefix+shift+minus"
 
+# « Mode zen » : prefix+z replie la sidebar (masquée entièrement via
+# sidebar_collapsed_mode = "hidden" plus bas). Le zoom de pane, qui occupe
+# prefix+z par défaut, part sur prefix+shift+Z.
+toggle_sidebar = "prefix+z"
+zoom = "prefix+shift+z"
+
 # Onglets en accès direct : alt+1..9 (en plus du prefix+1..9 par défaut).
 # Sous Ghostty/macOS, ne répond que si la touche Option envoie Alt
 # (macos-option-as-alt) — sinon prefix+1..9 reste la voie normale.
@@ -88,6 +94,10 @@ agent_panel_sort = "priority"
 
 # Barre d'onglets masquée quand le workspace n'a qu'un onglet.
 hide_tab_bar_when_single_tab = true
+
+# Sidebar repliée = totalement masquée (largeur zéro), pas de rail compact —
+# combiné à toggle_sidebar (prefix+z), c'est le « mode zen ».
+sidebar_collapsed_mode = "hidden"
 
 show_agent_labels_on_pane_borders = true
 [ui.toast]
