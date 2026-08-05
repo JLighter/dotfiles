@@ -19,7 +19,20 @@ ZSH_THEME=""
 SPACESHIP_PROMPT_ASYNC=true
 SPACESHIP_PROMPT_ADD_NEWLINE=true
 SPACESHIP_CHAR_SYMBOL="⚡"
-SPACESHIP_PROMPT_ORDER=(time user dir git line_sep char)
+
+# user/host ne s'affichent qu'en SSH (défaut) : savoir « qui » sans « où »
+# n'aide pas. exec_time était déjà calculé par son hook precmd sans être
+# affiché. exit_code et jobs restent muets tant qu'il n'y a rien à signaler.
+SPACESHIP_PROMPT_ORDER=(user host dir git exec_time line_sep jobs exit_code char)
+SPACESHIP_EXIT_CODE_SHOW=true
+
+# Contexte kube à droite : la commande destructrice se tape avant qu'on
+# pense à vérifier le cluster. Section async, ~30 ms à chaud.
+SPACESHIP_RPROMPT_ORDER=(kubectl_context)
+SPACESHIP_KUBECTL_CONTEXT_COLOR_GROUPS=(
+  red    'Production'
+  yellow 'UAT'
+)
 
 # ── Plugins (syntax highlighting must be last) ──
 plugins=(git zsh-completions zsh-autosuggestions zsh-syntax-highlighting)
