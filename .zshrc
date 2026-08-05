@@ -26,14 +26,6 @@ SPACESHIP_CHAR_SYMBOL="⚡"
 SPACESHIP_PROMPT_ORDER=(user host dir git exec_time line_sep jobs exit_code char)
 SPACESHIP_EXIT_CODE_SHOW=true
 
-# Contexte kube à droite : la commande destructrice se tape avant qu'on
-# pense à vérifier le cluster. Section async, ~30 ms à chaud.
-SPACESHIP_RPROMPT_ORDER=(kubectl_context)
-SPACESHIP_KUBECTL_CONTEXT_COLOR_GROUPS=(
-  red    'Production'
-  yellow 'UAT'
-)
-
 # ── Plugins (syntax highlighting must be last) ──
 plugins=(git zsh-completions zsh-autosuggestions zsh-syntax-highlighting)
 
