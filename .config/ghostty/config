@@ -3,7 +3,13 @@ term = xterm-ghostty
 theme = dark:Catppuccin Macchiato,light:Catppuccin Latte
 fullscreen = false
 
-command = /bin/zsh --login -c "tmux new -A -t ghostty -s $(/bin/cat /dev/urandom | base64 | tr -dc '0-9a-zA-Z' | head -c5);"
+# herdr au lancement : première surface uniquement (initial-command).
+# Les onglets/splits Ghostty suivants restent des shells zsh normaux —
+# avec `command`, chaque surface attacherait un client herdr miroir.
+# Le login shell garantit le PATH complet (herdr est dans ~/.local/bin,
+# jq/hooks des plugins herdr dans /opt/homebrew/bin) si le serveur herdr
+# doit être (re)démarré par cette surface.
+initial-command = /bin/zsh --login -c "herdr"
 
 shell-integration = detect
 shell-integration-features = cursor,sudo,title

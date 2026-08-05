@@ -1,3 +1,4 @@
+onboarding = false
 # ════════════════════════════════════════════════════════════
 # Herdr — configuration migrée depuis ~/.tmux.conf
 # Défauts complets : `herdr --default-config`
@@ -9,7 +10,7 @@
 # terminal hôte (Ghostty window-theme = auto) — remplace les hooks tmux
 # client-dark-theme / client-light-theme + reload-theme.sh.
 name = "catppuccin"
-auto_switch = true
+auto_switch = false
 dark_name = "catppuccin"
 light_name = "catppuccin-latte"
 
@@ -23,16 +24,39 @@ prefix = "ctrl+space"
 split_vertical = "prefix+/"
 split_horizontal = "prefix+minus"
 
+# Renommer le tab : prefix+, comme le rename-window de tmux
+# (remplace le prefix+shift+T par défaut).
+rename_tab = "prefix+comma"
+
 # Worktrees : ouvrir / retirer un workspace adossé à un git worktree
 # (créer = prefix+shift+G, défaut — un agent par branche, en parallèle).
 open_worktree = "prefix+shift+o"
 remove_worktree = "prefix+shift+minus"
 
-# « Mode zen » : prefix+z replie la sidebar (masquée entièrement via
-# sidebar_collapsed_mode = "hidden" plus bas). Le zoom de pane, qui occupe
-# prefix+z par défaut, part sur prefix+shift+Z.
-toggle_sidebar = "prefix+z"
-zoom = "prefix+shift+z"
+# Zoom du pane courant sur prefix+z, comme dans tmux. Le « mode zen »
+# (sidebar repliée, masquée entièrement via sidebar_collapsed_mode =
+# "hidden" plus bas) part sur prefix+b, le défaut herdr.
+zoom = "prefix+z"
+toggle_sidebar = "prefix+b"
+
+# Cycler entre les agents, tous workspaces confondus.
+next_agent = "prefix+a"
+previous_agent = "prefix+shift+a"
+
+# ── Panneau workspace (mode navigate) en vim ──────────────────────────
+# alt+w (Option gauche + w — macos-option-as-alt = left dans Ghostty)
+# ouvre la liste des workspaces de la sidebar, en plus du prefix+w par
+# défaut. Dedans : j/k parcourt la liste, enter bascule, esc sort, et
+# ctrl+h/j/k/l déplace le focus de pane (miroir des chords globaux).
+# ctrl+h direct au bord gauche ne peut PAS déborder sur la sidebar :
+# un chord direct n'a qu'un comportement global dans herdr.
+workspace_picker = ["prefix+w", "alt+w"]
+navigate_workspace_down = "j"
+navigate_workspace_up = "k"
+navigate_pane_left = "ctrl+h"
+navigate_pane_down = "ctrl+j"
+navigate_pane_up = "ctrl+k"
+navigate_pane_right = "ctrl+l"
 
 # Onglets en accès direct : alt+1..9 (en plus du prefix+1..9 par défaut).
 # Sous Ghostty/macOS, ne répond que si la touche Option envoie Alt
@@ -70,6 +94,14 @@ command = "vim-herdr-navigation.right"
 description = "navigate right (vim/herdr)"
 
 # ── Popups (équivalent display-popup de tmux) ─────────────────────────
+# Lancer un agent : popup du plugin herdr-spawn (prompt + historique,
+# worktree + workspace + agent). Config : herdr plugin config-dir herdr-spawn.
+[[keys.command]]
+key = "prefix+enter"
+type = "plugin_action"
+command = "herdr-spawn.open"
+description = "lancer un agent (worktree + prompt)"
+
 [[keys.command]]
 key = "prefix+f"
 type = "popup"
@@ -88,9 +120,11 @@ height = "90%"
 directory = "~/.herdr/worktrees"
 
 [ui]
-# "priority" : les agents qui attendent une réponse remontent en tête de
-# sidebar (file d'attention) — l'équivalent du glyphe jaune de l'ex-config tmux.
-agent_panel_sort = "priority"
+# "spaces" : agents groupés par workspace dans la sidebar — la hiérarchie
+# projet → agents reste visible en permanence (branche git par workspace).
+# La file d'attention des agents bloqués reste accessible à la demande :
+# prefix+g puis « b » (filtre blocked du navigator).
+agent_panel_sort = "spaces"
 
 # Barre d'onglets masquée quand le workspace n'a qu'un onglet.
 hide_tab_bar_when_single_tab = true
@@ -100,10 +134,17 @@ hide_tab_bar_when_single_tab = true
 sidebar_collapsed_mode = "hidden"
 
 show_agent_labels_on_pane_borders = true
+
+# Entrées agents de la sidebar, pour Claude : le workspace en gras (le
+# « projet ») puis le titre de session Claude Code (ce que l'agent fait)
+# — plus parlant que « claude » répété quand tous les agents sont Claude.
+[ui.sidebar.agents.rows_by_agent]
+claude = [["state_icon", { token = "workspace", bold = true }, "tab"], ["terminal_title_stripped"]]
+
 [ui.toast]
 # Notifications de bureau relayées au terminal hôte (Ghostty) — remplace
 # allow-passthrough de tmux pour les notifications Claude Code.
-delivery = "terminal"
+delivery = "system"
 
 [experimental]
 switch_ascii_input_source_in_prefix = true

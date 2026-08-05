@@ -14,3 +14,4 @@
 .claude,.claude
 .config/herdr/config.toml,.config/herdr/config.toml
 .config/herdr/workspaces,.config/herdr/workspaces
+.config/herdr/bin,.config/herdr/bin

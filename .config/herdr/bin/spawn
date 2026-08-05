@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# CLI de herdr-spawn — le moteur vit dans le plugin (source unique).
+exec bash "$HOME/.config/herdr/plugins/herdr-spawn/spawn.sh" "$@"
