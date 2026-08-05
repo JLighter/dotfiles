@@ -10,9 +10,12 @@ DISABLE_AUTO_TITLE="true"
 
 # ── Oh My Zsh ──
 export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="spaceship"
+# Prompt fourni par spaceship (Homebrew), chargé après oh-my-zsh : laisser
+# ZSH_THEME vide, sinon OMZ chargerait un thème par-dessus.
+ZSH_THEME=""
 
-# ── Spaceship (async + minimal sections) ──
+# ── Spaceship (à définir avant le source : les sections lisent ces valeurs
+#    au chargement via ${VAR=default}) ──
 SPACESHIP_PROMPT_ASYNC=true
 SPACESHIP_PROMPT_ADD_NEWLINE=true
 SPACESHIP_CHAR_SYMBOL="⚡"
@@ -24,6 +27,17 @@ plugins=(git zsh-completions zsh-autosuggestions zsh-syntax-highlighting)
 # oh-my-zsh.sh appelle déjà compinit avec son propre cache journalier
 # ($ZSH_COMPDUMP) — ne pas le rappeler ici, ça doublerait compinit + compaudit.
 source $ZSH/oh-my-zsh.sh
+
+# ── Spaceship (Homebrew : `brew install spaceship`, dépend de zsh-async) ──
+# spaceship.zsh fait `export -r SPACESHIP_ROOT` vers un chemin versionné du
+# Cellar. Un shell enfant en hérite, et après `brew upgrade spaceship` ce
+# chemin n'existe plus : le source échoue alors sur chaque lib. On repart donc
+# de la détection. L'unset échoue sans bruit si spaceship est déjà chargé ici.
+unset SPACESHIP_ROOT SPACESHIP_VERSION 2>/dev/null
+
+SPACESHIP_ZSH="${HOMEBREW_PREFIX:-/opt/homebrew}/opt/spaceship/spaceship.zsh"
+[ -r "$SPACESHIP_ZSH" ] && source "$SPACESHIP_ZSH"
+unset SPACESHIP_ZSH
 
 # ── Autosuggest ──
 ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE="20"
