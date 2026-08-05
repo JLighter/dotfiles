@@ -14,17 +14,8 @@ export ZSH="$HOME/.oh-my-zsh"
 # ZSH_THEME vide, sinon OMZ chargerait un thème par-dessus.
 ZSH_THEME=""
 
-# ── Spaceship (à définir avant le source : les sections lisent ces valeurs
-#    au chargement via ${VAR=default}) ──
-SPACESHIP_PROMPT_ASYNC=true
-SPACESHIP_PROMPT_ADD_NEWLINE=true
-SPACESHIP_CHAR_SYMBOL="⚡"
-
-# user/host ne s'affichent qu'en SSH (défaut) : savoir « qui » sans « où »
-# n'aide pas. exec_time était déjà calculé par son hook precmd sans être
-# affiché. exit_code et jobs restent muets tant qu'il n'y a rien à signaler.
-SPACESHIP_PROMPT_ORDER=(user host dir git exec_time line_sep jobs exit_code char)
-SPACESHIP_EXIT_CODE_SHOW=true
+# Réglages du prompt : ~/.config/spaceship.zsh (chargé par spaceship, et
+# rechargeable à chaud via `spaceship edit`).
 
 # ── Plugins (syntax highlighting must be last) ──
 plugins=(git zsh-completions zsh-autosuggestions zsh-syntax-highlighting)
