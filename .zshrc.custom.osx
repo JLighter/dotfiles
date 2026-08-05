@@ -11,7 +11,7 @@ _lazy_completion() {
         ${cmd}() {
             unfunction ${cmd}
             source <(command ${cmd} completion zsh)
-            ${cmd} \"\\\$@\"
+            ${cmd} \"\$@\"
         }
     "
 }
