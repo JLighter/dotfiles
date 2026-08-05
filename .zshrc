@@ -4,6 +4,10 @@ DISABLE_MAGIC_FUNCTIONS="true"
 DISABLE_COMPFIX="true"
 skip_global_compinit=1
 
+# Titre de terminal figé : mécanisme OMZ, au lieu d'un precmd() maison qui
+# entrait en conflit avec omz_termsupport_precmd.
+DISABLE_AUTO_TITLE="true"
+
 # ── Oh My Zsh ──
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="spaceship"
@@ -15,21 +19,24 @@ SPACESHIP_CHAR_SYMBOL="⚡"
 SPACESHIP_PROMPT_ORDER=(time user dir git line_sep char)
 
 # ── Plugins (syntax highlighting must be last) ──
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
+plugins=(git zsh-completions zsh-autosuggestions zsh-syntax-highlighting)
 
+# oh-my-zsh.sh appelle déjà compinit avec son propre cache journalier
+# ($ZSH_COMPDUMP) — ne pas le rappeler ici, ça doublerait compinit + compaudit.
 source $ZSH/oh-my-zsh.sh
 
 # ── Autosuggest ──
 ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE="20"
 ZSH_AUTOSUGGEST_USE_ASYNC=1
 
-# ── Compinit: once per day, single call ──
-autoload -Uz compinit
-if [ "$(date +'%j')" != "$(stat -f '%Sm' -t '%j' ~/.zcompdump 2>/dev/null)" ]; then
-    compinit
-else
-    compinit -C
-fi
+# ── Historique (HISTSIZE/SAVEHIST d'OMZ sont à 50000/10000) ──
+HISTSIZE=200000
+SAVEHIST=200000
+setopt HIST_IGNORE_ALL_DUPS HIST_REDUCE_BLANKS
+
+# ── Éditeur ──
+export EDITOR="nvim"
+export VISUAL="$EDITOR"
 
 # ── Alias expansion ──
 globalias() {
@@ -44,21 +51,15 @@ bindkey " " globalias
 bindkey "^[[Z" magic-space
 bindkey -M isearch " " magic-space
 
-# ── SSH agent: run once at startup, not in precmd ──
-if [ -z "$SSH_AUTH_SOCK" ]; then
-    eval "$(ssh-agent -s)" > /dev/null
-    ssh-add ~/.ssh/id_github_sign_and_auth 2>/dev/null
-fi
+# L'agent SSH est fourni par launchd sur macOS (SSH_AUTH_SOCK toujours défini) :
+# pas de ssh-agent à lancer ici. Cf. AddKeysToAgent/UseKeychain dans ~/.ssh/config.
 
-export PATH
-
-[ -f ~/.zsh_aliases ] && source ~/.zsh_aliases
 source ~/.zshrc.custom
 
-# ── Fzf (deduplicated) ──
+# ── Fzf ──
 if [ -f ~/.fzf.zsh ]; then
     source ~/.fzf.zsh
-    FZF_DEFAULT_OPTS="--bind ctrl-a:select-all,ctrl-d:deselect-all,ctrl-t:toggle-all"
+    export FZF_DEFAULT_OPTS="--bind ctrl-a:select-all,ctrl-d:deselect-all,ctrl-t:toggle-all"
 fi
 
 # ── Zoxide ──
@@ -66,8 +67,6 @@ command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
 # ── Envman ──
 [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
-
-precmd () { print -Pn "\e]0;zsh\a" }
 
 # ── Conda: lazy-loaded ──
 conda() {
@@ -98,15 +97,12 @@ fi
 command -v bat &>/dev/null && export BAT_THEME="kanagawa"
 
 # ── PATH additions ──
-export PATH="$PATH:/Users/julien/.lmstudio/bin"
+export PATH="$PATH:$HOME/.lmstudio/bin"
 
-export PNPM_HOME="/Users/julien/Library/pnpm"
-case ":$PATH:" in
-  *":$PNPM_HOME:"*) ;;
-  *) export PATH="$PNPM_HOME:$PATH" ;;
-esac
+export PNPM_HOME="$HOME/Library/pnpm"
+export PATH="$PNPM_HOME:$PATH"
 
-export PATH="/Users/julien/.antigravity/antigravity/bin:$PATH"
+export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
 
 export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
 

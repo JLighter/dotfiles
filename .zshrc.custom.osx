@@ -30,7 +30,6 @@ command -v mvn &>/dev/null && export JAVA_HOME=/Library/Java/JavaVirtualMachines
 
 # ── Azure: lazy-loaded ──
 if command -v az &>/dev/null; then
-    _orig_az=$(which az)
     az() {
         unfunction az
         source /opt/homebrew/etc/bash_completion.d/az
@@ -55,4 +54,4 @@ export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 export PATH="$PATH:$HOME/.local/go/bin"
 export PATH="$PATH:/opt/homebrew/opt/python/libexec/bin"
 
-[ -f '/Users/julien/Downloads/google-cloud-sdk/path.zsh.inc' ] && . '/Users/julien/Downloads/google-cloud-sdk/path.zsh.inc'
+[ -f "$HOME/Downloads/google-cloud-sdk/path.zsh.inc" ] && . "$HOME/Downloads/google-cloud-sdk/path.zsh.inc"

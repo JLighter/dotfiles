@@ -6,7 +6,6 @@
 .npmrc,.npmrc
 .config/nvim,.config/nvim
 .config/termite,.config/termite
-.p10k.zsh,.p10k.zsh
 .gitconfig,.gitconfig
 .hyper.js,.hyper.js
 .config/tmuxinator,.config/tmuxinator
