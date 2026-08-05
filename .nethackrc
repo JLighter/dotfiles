@@ -12,7 +12,6 @@ OPTIONS=norest_on_space
 OPTIONS=sortpack
 OPTIONS=autopickup
 OPTIONS=autoopen
-#OPTIONS=autodig
 OPTIONS=pickup_types:$
 OPTIONS=pickup_burden:S
 OPTIONS=pickup_thrown
@@ -20,7 +19,7 @@ OPTIONS=disclose:-i -a +v -g +c +o
 
 OPTIONS=number_pad:0
 
-OPTIONS=suppress_alert:3.4.3
+OPTIONS=suppress_alert:3.6.7
 OPTIONS=lit_corridor
 
 # The following are options not in vanilla NetHack:
@@ -31,13 +30,9 @@ OPTIONS=use_darkgray
 #
 #OPTIONS=hp_monitor
 #
-MENUCOLOR=" blessed "=green
-MENUCOLOR=" holy "=green
-MENUCOLOR=" cursed "=red
-MENUCOLOR=" unholy "=red
-MENUCOLOR=" cursed .* (being worn)"=orange&underline
-#
-# OPTIONS=paranoid_hit,paranoid_quit,paranoid_remove
+# Anti fat-finger : confirmations explicites sur les actions dangereuses
+# (les MENUCOLOR sont définis plus bas, après OPTIONS=menucolors)
+OPTIONS=paranoid_confirmation:quit attack die bones remove Were pray wand
 #
 OPTIONS=sortloot:full
 #
@@ -64,7 +59,8 @@ OPTIONS=mouse_support
 OPTIONS=perm_invent
 OPTIONS=msg_window:single
 OPTIONS=fixinv
-OPTIONS=classic_status
+# classic_status : option non reconnue par ce build (MacOS NetHack 5.0.0) -> laissée commentée
+#OPTIONS=classic_status
 
 # Always show pets as the proper color.
 OPTIONS=hilite_pet
@@ -132,7 +128,7 @@ OPTIONS=hilite_status:hitpoints/down/red&bold
 OPTIONS=hilite_status:hitpoints/100%/green&normal
 OPTIONS=hilite_status:hitpoints/<100%/yellow&normal
 OPTIONS=hilite_status:hitpoints/<66%/orange&normal
-OPTIONS=hilite_status:hitpoints/<50%/orange&normal
+OPTIONS=hilite_status:hitpoints/<50%/red&normal
 OPTIONS=hilite_status:hitpoints/<33%/red&bold
 OPTIONS=hilite_status:hitpoints/<15%/red&inverse
 
