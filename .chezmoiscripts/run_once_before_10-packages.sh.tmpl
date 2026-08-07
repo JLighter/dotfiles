@@ -1,0 +1,26 @@
+#!/bin/sh
+# Socle de paquets. Rejoué uniquement si ce fichier change (run_once_).
+set -eu
+
+log() { printf '\033[1;34m::\033[0m %s\n' "$1"; }
+
+{{ if eq .chezmoi.os "darwin" -}}
+if ! command -v brew >/dev/null 2>&1; then
+    printf '\033[1;31m!!\033[0m Homebrew requis : https://brew.sh\n' >&2
+    exit 1
+fi
+
+log "Paquets Homebrew"
+brew install --quiet zsh git neovim tmux fzf zoxide bat spaceship
+{{- else -}}
+log "Paquets pacman"
+sudo pacman -S --needed --noconfirm zsh git neovim tmux fzf zoxide bat
+
+# spaceship n'est que dans l'AUR. yay est fourni par Omarchy.
+if command -v yay >/dev/null 2>&1; then
+    log "spaceship-prompt (AUR)"
+    yay -S --needed --noconfirm spaceship-prompt
+else
+    printf '\033[1;33m..\033[0m yay absent : installe spaceship-prompt manuellement\n' >&2
+fi
+{{- end }}

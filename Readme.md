@@ -1,58 +1,85 @@
-# Quickstart
-I use [ssh0/dot](https://github.com/ssh0/dot) dotfiles manager for maintaining these files through all my computers
-you just have to download this software and source the dot.sh file (all the other configuration of this repo is already set inside my dotfiles)
+# Dotfiles
 
-  ```
-  git clone https://github.com/ssh0/dot $HOME/.zsh/dot && \
-  source $HOME/.zsh/dot/dot.sh && \
-  git clone https://github.com/jlighter/dotfiles $HOME/.dotfiles
-  ```
+Gérés avec [chezmoi](https://www.chezmoi.io/). Deux cibles : **macOS** et **Omarchy** (Arch + Hyprland).
 
-You know have to create the configuration for dot.
-Copy the dotrc into .config/dot/
+Le dépôt est la *source*, `$HOME` est la *cible*. Les fichiers ne sont pas symlinkés :
+`chezmoi apply` écrit les fichiers réels, après avoir évalué les templates pour la
+machine courante. `chezmoi diff` montre ce qui changerait avant d'appliquer.
 
-  `cp -i $HOME/.zsh/dot/examples/dotrc $HOME/.config/dot/`
+## Bootstrap sur une nouvelle machine
 
-Change the linkfile you want to use inside dotrc file. 
+Une seule commande, identique sur macOS et sur Omarchy :
 
-Run the `dot set` command
+```sh
+sh -c "$(curl -fsLS https://raw.githubusercontent.com/jlighter/dotfiles/main/bootstrap.sh)"
+```
 
-You're done with the dotfiles !
+Seul prérequis : `git` (et Homebrew sur macOS). Le script installe chezmoi, clone le
+dépôt dans `~/.dotfiles`, puis applique. Il est idempotent : relançable sans risque.
 
-## ZSH Plugins
-I have installed several plugins in order to make zsh more user friendly and colorful
+`chezmoi init` pose trois questions (nom git, email git, machine pro ou non) et écrit
+les réponses dans `~/.config/chezmoi/chezmoi.toml`. Elles ne sont demandées qu'une
+fois par machine, et c'est ce fichier qui fixe `sourceDir` à `~/.dotfiles` — les
+commandes suivantes n'ont plus besoin de `--source`.
 
-Three of them cannot be installed by zsh plugin installer.
-You need to launch these 3 commands :
-- git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-- git clone https://github.com/zsh-users/zsh-completions ${ZSH_CUSTOM:=~/.oh-my-zsh/custom}/plugins/zsh-completions
-- git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+Le reste est pris en charge par les scripts de `.chezmoiscripts/`, que `chezmoi apply`
+déclenche automatiquement une seule fois (`run_once_`) :
 
-You also need to install powerlink10k :
-- git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+| Script                | Rôle                                                        |
+| --------------------- | ----------------------------------------------------------- |
+| `10-packages`         | zsh, git, neovim, tmux, fzf, zoxide, bat, spaceship          |
+| `20-oh-my-zsh`        | oh-my-zsh et les trois plugins zsh                           |
+| `30-tpm`              | gestionnaire de plugins tmux                                 |
+| `40-default-shell`    | `chsh` vers zsh — seule étape qui demande le mot de passe    |
 
+Deux gestes manuels restent, volontairement hors script : `<C-a> I` dans tmux pour
+installer les plugins, et le premier lancement de Neovim pour LazyVim.
 
-## Neovim 
-First install neovim with your distribution package manager
+## Usage quotidien
 
-Then, install [vim-plug](https://github.com/junegunn/vim-plug)
+```sh
+chezmoi edit ~/.zshrc   # éditer la source du fichier
+chezmoi diff            # voir les écarts source ↔ $HOME
+chezmoi apply           # appliquer
+chezmoi add ~/.foo      # faire entrer un nouveau fichier dans le dépôt
+chezmoi cd              # aller dans ~/.dotfiles
+chezmoi update          # git pull + apply
+```
 
-  `sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
-         https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'`
+Après un `git pull` manuel, un `chezmoi apply` suffit.
 
-Run neovim and launch the `:PlugInstall` command
+## Convention de nommage des sources
 
-### Coc extensions
+chezmoi encode les métadonnées dans le nom des fichiers du dépôt :
 
-Inside neovim run this command :
+| Source                          | Cible                     |
+| ------------------------------- | ------------------------- |
+| `dot_zshrc.tmpl`                | `~/.zshrc` (template)     |
+| `dot_config/nvim/`              | `~/.config/nvim/`         |
+| `dot_claude/hooks/executable_*` | fichier déployé en `+x`   |
 
-  `:CocInstall coc-sh coc-prettier coc-jedi coc-html coc-json coc-angular coc-git coc-tsserver coc-tslint-plugin coc-pyright`
+Les fichiers commençant par un point dans le dépôt (`.gitignore`, `.chezmoiignore`)
+sont **ignorés** par chezmoi : ils servent au dépôt, pas à `$HOME`.
 
-## TMUX
-Install tmux with your package manager
+## Ce qui diffère entre les machines
 
-Install [tpm](https://github.com/tmux-plugins/tpm)
+- `dot_zshrc.tmpl` — chemins Homebrew / Java / pnpm / gcloud selon l'OS, agent SSH
+  (launchd sur macOS, systemd sur Arch), emplacement de `spaceship.zsh`.
+- `dot_gitconfig.tmpl` — nom et email, et la redirection `insteadOf` GitLab n'est
+  écrite que sur une machine marquée pro.
+- `.chezmoiignore` — les overrides Hyprland ne sont jamais déployés sur macOS,
+  `.hushlogin` ne l'est que sur macOS.
 
-  `git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm`
+Pour une surcharge locale à une seule machine et non versionnée : `~/.zshrc.local`,
+sourcé en fin de `.zshrc`.
 
-Go to tmux and run **\<C-a> I** in order to install plugins
+## Dépendances externes
+
+- **zsh** : oh-my-zsh, plus trois plugins à cloner dans `$ZSH_CUSTOM/plugins/` —
+  [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions),
+  [zsh-completions](https://github.com/zsh-users/zsh-completions),
+  [zsh-syntax-highlighting](https://github.com/zsh-users/zsh-syntax-highlighting).
+- **Neovim** : config [LazyVim](https://www.lazyvim.org/), les plugins s'installent
+  au premier lancement (`lazy-lock.json` fait foi).
+- **tmux** : [tpm](https://github.com/tmux-plugins/tpm) à cloner dans
+  `~/.config/tmux/plugins/tpm`, puis `<C-a> I`.

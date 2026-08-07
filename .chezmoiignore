@@ -2,6 +2,7 @@
 
 # ── Fichiers du dépôt qui ne doivent pas atterrir dans $HOME ──────────────────
 Readme.md
+bootstrap.sh
 
 {{ if ne .chezmoi.os "darwin" }}
 # ── macOS uniquement ─────────────────────────────────────────────────────────
