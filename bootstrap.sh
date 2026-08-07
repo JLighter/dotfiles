@@ -1,7 +1,7 @@
 #!/bin/sh
 # Amorçage complet d'une machine, macOS ou Omarchy.
 #
-#   sh -c "$(curl -fsLS https://raw.githubusercontent.com/jlighter/dotfiles/main/bootstrap.sh)"
+#   sh -c "$(curl -fsLS https://raw.githubusercontent.com/JLighter/dotfiles/main/bootstrap.sh)"
 #
 # Installe chezmoi, clone le dépôt, applique les dotfiles. Tout le reste
 # (paquets, oh-my-zsh, plugins, tpm, shell par défaut) est pris en charge par
@@ -10,7 +10,7 @@
 # Idempotent : relançable sans risque sur une machine déjà configurée.
 set -eu
 
-REPO_URL="https://github.com/jlighter/dotfiles.git"
+REPO_URL="https://github.com/JLighter/dotfiles.git"
 DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 
 log()  { printf '\033[1;34m::\033[0m %s\n' "$1"; }

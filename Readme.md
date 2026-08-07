@@ -11,7 +11,7 @@ machine courante. `chezmoi diff` montre ce qui changerait avant d'appliquer.
 Une seule commande, identique sur macOS et sur Omarchy :
 
 ```sh
-sh -c "$(curl -fsLS https://raw.githubusercontent.com/jlighter/dotfiles/main/bootstrap.sh)"
+sh -c "$(curl -fsLS https://raw.githubusercontent.com/JLighter/dotfiles/main/bootstrap.sh)"
 ```
 
 Seul prérequis : `git` (et Homebrew sur macOS). Le script installe chezmoi, clone le
