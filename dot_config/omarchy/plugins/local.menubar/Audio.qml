@@ -19,6 +19,7 @@ BarWidget {
   moduleName: "local.menubar.audio"
 
   readonly property int islandSize: bar && bar.islandSize !== undefined ? bar.islandSize : barSize
+  readonly property int islandRadius: bar && bar.islandRadius !== undefined ? bar.islandRadius : Style.cornerRadius
 
   // Une seule courbe pour tout ce qui se deplie : le panneau et la jauge de
   // volume bougent au meme rythme.
@@ -497,12 +498,15 @@ BarWidget {
   }
 
   // Halo de survol, cale sur le bouton seul : la jauge garde son propre fond.
+  // Meme rayon que l'ilot, et non la moitie de la hauteur : Qt rabat le rayon
+  // a la moitie du plus petit cote, ce qui arrondissait le halo plus que
+  // l'ilot qui l'entoure. Le bouton est tenu assez large pour eviter ce rabat.
   Rectangle {
     x: button.x
     y: button.y
     width: button.width
     height: button.height
-    radius: Math.min(height / 2, Style.cornerRadius)
+    radius: root.islandRadius
     color: root.accentColor
     opacity: button.tooltipHovered || root.opened ? root.accentFillOpacity : 0
 
@@ -519,7 +523,7 @@ BarWidget {
     bar: root.bar
     text: root.outputIcon()
     tooltipText: root.outputMuted ? "Muted" : "Volume " + Math.round(root.outputVolume * 100) + "%"
-    fixedWidth: root.vertical ? root.islandSize : Style.space(24)
+    fixedWidth: root.vertical ? root.islandSize : Math.max(Style.space(24), root.islandRadius * 2)
     fixedHeight: root.islandSize
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) root.toggleOutputMute()
