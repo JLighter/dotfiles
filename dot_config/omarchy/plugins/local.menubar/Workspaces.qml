@@ -13,6 +13,10 @@ BarWidget {
 
   property int minimumWorkspaces: 5
 
+  // Hauteur de l'ilot qui nous contient : plus petite que `barSize`, qui compte
+  // en plus l'air laisse entre les ilots et les bords de la surface.
+  readonly property int islandSize: bar && bar.islandSize !== undefined ? bar.islandSize : barSize
+
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
     for (var i = 0; i < values.length; i++) {
@@ -73,8 +77,8 @@ BarWidget {
         // Actif = couleur d'accent ; vide = estompe, sans disparaitre.
         active: focused
         opacity: occupied || focused ? 1 : 0.4
-        fixedWidth: root.vertical ? root.barSize : Style.space(20)
-        fixedHeight: root.barSize
+        fixedWidth: root.vertical ? root.islandSize : Style.space(20)
+        fixedHeight: root.islandSize
         onPressed: function(mouseButton) {
           if (mouseButton === Qt.LeftButton) root.focusWorkspace(modelData)
         }

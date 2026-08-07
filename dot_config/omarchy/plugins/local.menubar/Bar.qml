@@ -2,13 +2,17 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Widgets
 import qs.Commons
 import qs.Ui
 
 // Barre de statut minimale : un switcher de workspaces au bord de depart, une
-// horloge au bord oppose. La disposition est ecrite en dur ici, `bar.layout`
-// de shell.json ne s'applique pas a cette barre (les commandes `omarchy bar
-// add/remove/move` ne la touchent donc pas).
+// horloge au bord oppose. La surface elle-meme ne peint rien — chaque composant
+// materialise son propre ilot, le fond de bureau passe entre eux.
+//
+// La disposition est ecrite en dur ici, `bar.layout` de shell.json ne s'applique
+// pas a cette barre (les commandes `omarchy bar add/remove/move` ne la touchent
+// donc pas).
 Item {
   id: root
 
@@ -30,8 +34,18 @@ Item {
     return ["top", "bottom", "left", "right"].indexOf(value) !== -1 ? value : "top"
   }
   readonly property bool vertical: position === "left" || position === "right"
-  readonly property int barSize: vertical ? Style.bar.sizeVertical : Style.bar.sizeHorizontal
   readonly property bool transparent: Util.isPlainObject(barConfig) && barConfig.transparent === true
+
+  // Geometrie des ilots. `barSize` reste la hauteur reelle de la surface, celle
+  // que les autres plugins lisent pour ne pas s'afficher dessous ; les widgets
+  // se dimensionnent sur `islandSize`, plus petit de l'air laisse autour.
+  readonly property int islandSize: vertical ? Style.bar.sizeVertical : Style.bar.sizeHorizontal
+  readonly property int islandGap: Style.space(4)
+  readonly property int islandPadding: Style.space(3)
+  readonly property int islandRadius: Math.min(Style.cornerRadius, islandSize / 2)
+  readonly property int barSize: islandSize + islandGap * 2
+  // Distance entre le premier/dernier ilot et le bord de l'ecran.
+  readonly property int edgeMargin: Style.space(8)
 
   // Contrat attendu par WidgetButton (qui lit ces couleurs sans garde) et par
   // les plugins qui s'ancrent sur la barre : le service de notifications lit
@@ -138,6 +152,18 @@ Item {
 
   // --- Surfaces --------------------------------------------------------------
 
+  // Pastille de fond d'un composant. WrapperRectangle dimensionne et positionne
+  // son unique enfant : le widget n'a qu'a declarer ses tailles implicites, et
+  // ne doit surtout pas s'ancrer lui-meme.
+  component Island: WrapperRectangle {
+    color: root.transparent ? "transparent" : root.background
+    radius: root.islandRadius
+    leftMargin: root.vertical ? 0 : root.islandPadding
+    rightMargin: root.vertical ? 0 : root.islandPadding
+    topMargin: root.vertical ? root.islandPadding : 0
+    bottomMargin: root.vertical ? root.islandPadding : 0
+  }
+
   Variants {
     model: Quickshell.screens
 
@@ -149,7 +175,8 @@ Item {
 
         screen: modelData
         visible: !root.barHidden
-        color: root.transparent ? "transparent" : root.background
+        // La surface ne peint rien : seuls les ilots ont un fond.
+        color: "transparent"
 
         // Ancrer deux bords opposes etire la fenetre le long de ceux-ci.
         anchors {
@@ -176,18 +203,20 @@ Item {
           Item {
             anchors.fill: parent
 
-            Workspaces {
-              bar: root
+            Island {
               anchors.left: parent.left
-              anchors.leftMargin: Style.space(8)
+              anchors.leftMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
+
+              Workspaces { bar: root }
             }
 
-            Clock {
-              bar: root
+            Island {
               anchors.right: parent.right
-              anchors.rightMargin: Style.space(8)
+              anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
+
+              Clock { bar: root }
             }
           }
         }
@@ -198,18 +227,20 @@ Item {
           Item {
             anchors.fill: parent
 
-            Workspaces {
-              bar: root
+            Island {
               anchors.top: parent.top
-              anchors.topMargin: Style.space(8)
+              anchors.topMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
+
+              Workspaces { bar: root }
             }
 
-            Clock {
-              bar: root
+            Island {
               anchors.bottom: parent.bottom
-              anchors.bottomMargin: Style.space(8)
+              anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
+
+              Clock { bar: root }
             }
           }
         }

@@ -18,6 +18,9 @@ BarWidget {
   property bool alt: false
 
   readonly property string activeFormat: alt ? formatAlt : (root.vertical ? verticalFormat : format)
+  // Hauteur de l'ilot qui nous contient : plus petite que `barSize`, qui compte
+  // en plus l'air laisse entre les ilots et les bords de la surface.
+  readonly property int islandSize: bar && bar.islandSize !== undefined ? bar.islandSize : barSize
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -35,8 +38,9 @@ BarWidget {
     bar: root.bar
     text: Qt.formatDateTime(clock.date, root.activeFormat)
     tooltipText: Qt.formatDateTime(clock.date, "dddd d MMMM yyyy")
-    horizontalMargin: 8.75
-    verticalPadding: 8.75
+    // L'ilot apporte deja sa propre marge horizontale.
+    horizontalMargin: 6
+    fixedHeight: root.islandSize
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.LeftButton) root.alt = !root.alt
     }
