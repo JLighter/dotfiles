@@ -246,19 +246,24 @@ Item {
               Clock { bar: root }
             }
 
-            // Reseau et son partagent une seule pastille : ce sont deux
-            // reglages systeme voisins, et la jauge de volume s'y deplie.
-            Island {
+            Row {
               anchors.right: parent.right
               anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
+              spacing: root.islandGap
 
-              Row {
-                spacing: 0
+              Island { ClaudeUsage { bar: root } }
 
-                Network { bar: root }
+              // Reseau et son partagent une seule pastille : ce sont deux
+              // reglages systeme voisins, et la jauge de volume s'y deplie.
+              Island {
+                Row {
+                  spacing: 0
 
-                Audio { bar: root }
+                  Network { bar: root }
+
+                  Audio { bar: root }
+                }
               }
             }
           }
@@ -285,17 +290,22 @@ Item {
               Clock { bar: root }
             }
 
-            Island {
+            Column {
               anchors.bottom: parent.bottom
               anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
+              spacing: root.islandGap
 
-              Column {
-                spacing: 0
+              Island { ClaudeUsage { bar: root } }
 
-                Network { bar: root }
+              Island {
+                Column {
+                  spacing: 0
 
-                Audio { bar: root }
+                  Network { bar: root }
+
+                  Audio { bar: root }
+                }
               }
             }
           }
