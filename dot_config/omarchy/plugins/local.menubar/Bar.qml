@@ -58,6 +58,14 @@ Item {
   property bool foregroundAnimationEnabled: true
   property bool barHidden: false
 
+  // Accent commun a tout ce qui est actif, survole ou en train de bouger :
+  // c'est la teinte que porte deja le workspace courant.
+  readonly property color accent: urgent
+  readonly property real accentFillOpacity: 0.18
+  // Une seule courbe pour tout ce qui se deplie ou s'allume dans la barre.
+  readonly property int revealDuration: 180
+  readonly property int revealEasing: Easing.OutCubic
+
   Behavior on background { ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
   Behavior on barForeground { ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
 

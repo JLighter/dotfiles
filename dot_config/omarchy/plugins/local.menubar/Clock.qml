@@ -22,8 +22,24 @@ BarWidget {
   // en plus l'air laisse entre les ilots et les bords de la surface.
   readonly property int islandSize: bar && bar.islandSize !== undefined ? bar.islandSize : barSize
 
+  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
+  readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
+
+  // Halo de survol, dans la meme teinte que le workspace actif.
+  Rectangle {
+    anchors.fill: parent
+    radius: Math.min(height / 2, Style.cornerRadius)
+    color: root.accentColor
+    opacity: button.tooltipHovered ? root.accentFillOpacity : 0
+
+    Behavior on opacity {
+      NumberAnimation { duration: root.revealDuration; easing.type: Easing.OutCubic }
+    }
+  }
 
   // Reveille le binding a chaque changement de minute, pas a chaque seconde.
   SystemClock {

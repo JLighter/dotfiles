@@ -17,6 +17,10 @@ BarWidget {
   // en plus l'air laisse entre les ilots et les bords de la surface.
   readonly property int islandSize: bar && bar.islandSize !== undefined ? bar.islandSize : barSize
 
+  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
+  readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
+
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
     for (var i = 0; i < values.length; i++) {
@@ -64,23 +68,45 @@ BarWidget {
     Repeater {
       model: root.workspaceIds()
 
-      WidgetButton {
+      Item {
+        id: cell
+
         required property int modelData
 
-        readonly property var workspace: root.workspaceById(modelData)
-        readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
-        readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
+        implicitWidth: workspaceButton.implicitWidth
+        implicitHeight: workspaceButton.implicitHeight
 
-        bar: root.bar
-        // Le workspace 10 s'affiche "0" pour tenir sur un caractere.
-        text: modelData === 10 ? "0" : String(modelData)
-        // Actif = couleur d'accent ; vide = estompe, sans disparaitre.
-        active: focused
-        opacity: occupied || focused ? 1 : 0.4
-        fixedWidth: root.vertical ? root.islandSize : Style.space(20)
-        fixedHeight: root.islandSize
-        onPressed: function(mouseButton) {
-          if (mouseButton === Qt.LeftButton) root.focusWorkspace(modelData)
+        // Halo de survol, dans la meme teinte que le workspace actif.
+        Rectangle {
+          anchors.fill: parent
+          radius: Math.min(height / 2, Style.cornerRadius)
+          color: root.accentColor
+          opacity: workspaceButton.tooltipHovered ? root.accentFillOpacity : 0
+
+          Behavior on opacity {
+            NumberAnimation { duration: root.revealDuration; easing.type: Easing.OutCubic }
+          }
+        }
+
+        WidgetButton {
+          id: workspaceButton
+
+          readonly property var workspace: root.workspaceById(cell.modelData)
+          readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
+          readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === cell.modelData
+
+          anchors.fill: parent
+          bar: root.bar
+          // Le workspace 10 s'affiche "0" pour tenir sur un caractere.
+          text: cell.modelData === 10 ? "0" : String(cell.modelData)
+          // Actif = couleur d'accent ; vide = estompe, sans disparaitre.
+          active: focused
+          opacity: occupied || focused ? 1 : 0.4
+          fixedWidth: root.vertical ? root.islandSize : Style.space(20)
+          fixedHeight: root.islandSize
+          onPressed: function(mouseButton) {
+            if (mouseButton === Qt.LeftButton) root.focusWorkspace(cell.modelData)
+          }
         }
       }
     }

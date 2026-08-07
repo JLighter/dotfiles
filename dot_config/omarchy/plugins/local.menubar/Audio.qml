@@ -20,6 +20,32 @@ BarWidget {
 
   readonly property int islandSize: bar && bar.islandSize !== undefined ? bar.islandSize : barSize
 
+  // Une seule courbe pour tout ce qui se deplie : le panneau et la jauge de
+  // volume bougent au meme rythme.
+  readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
+  readonly property int revealEasing: Easing.OutCubic
+
+  // Accent porte par tout ce qui est actif, survole ou en mouvement — la teinte
+  // du workspace courant.
+  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
+
+  // Le panneau arrive du bord occupe par la barre, et grandit depuis ce bord.
+  readonly property string barPosition: bar ? bar.position : "top"
+  readonly property int revealDistance: Style.space(12)
+  readonly property int revealOffsetX: barPosition === "left"
+    ? -revealDistance
+    : (barPosition === "right" ? revealDistance : 0)
+  readonly property int revealOffsetY: barPosition === "bottom"
+    ? revealDistance
+    : (barPosition === "top" ? -revealDistance : 0)
+  readonly property int transformOriginForBar: {
+    if (barPosition === "bottom") return Item.Bottom
+    if (barPosition === "left") return Item.Left
+    if (barPosition === "right") return Item.Right
+    return Item.Top
+  }
+
   // --- Etat PipeWire ---------------------------------------------------------
 
   readonly property var sink: Pipewire.defaultAudioSink
@@ -382,14 +408,114 @@ BarWidget {
     cursor = position
   }
 
+  // --- Jauge de volume -------------------------------------------------------
+  // Se deplie dans l'ilot des que le volume bouge, d'ou qu'il vienne : touches
+  // media, molette sur l'icone ou slider du panneau. L'ilot suit sa taille et
+  // s'etire avec elle. Masquee tant que le panneau est ouvert, qui montre deja
+  // le meme reglage en plus detaille.
+
+  readonly property int gaugeLength: Style.space(44)
+  readonly property int gaugeThickness: Math.max(3, Style.space(4))
+  readonly property int gaugeInset: Style.space(6)
+
+  property bool gaugeHeld: false
+  readonly property bool gaugeRevealed: gaugeHeld && !opened
+  // Non `readonly` : un Behavior ne peut pas s'attacher a une propriete en
+  // lecture seule, alors que c'est bien ce binding qu'il doit animer.
+  property int gaugeExtent: gaugeRevealed ? gaugeLength : 0
+
+  Behavior on gaugeExtent {
+    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+  }
+
+  function revealGauge() {
+    gaugeHeld = true
+    gaugeHideTimer.restart()
+  }
+
+  Timer {
+    id: gaugeHideTimer
+    interval: 1800
+    onTriggered: root.gaugeHeld = false
+  }
+
+  // PipeWire publie un volume nul le temps de s'initialiser : sans ce delai,
+  // la jauge se deplierait toute seule au demarrage du shell.
+  property bool volumeTrackingArmed: false
+
+  Timer {
+    interval: 1200
+    running: !!root.sink && !root.volumeTrackingArmed
+    onTriggered: root.volumeTrackingArmed = true
+  }
+
+  onOutputVolumeChanged: if (volumeTrackingArmed) revealGauge()
+  onOutputMutedChanged: if (volumeTrackingArmed) revealGauge()
+
   // --- Bouton de barre -------------------------------------------------------
 
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  implicitWidth: root.vertical ? root.islandSize : gauge.width + button.implicitWidth
+  implicitHeight: root.vertical ? gauge.height + button.implicitHeight : root.islandSize
+
+  Item {
+    id: gauge
+
+    width: root.vertical ? root.islandSize : root.gaugeExtent
+    height: root.vertical ? root.gaugeExtent : root.islandSize
+    // La piste garde sa taille pendant que le cadre se replie : elle disparait
+    // en glissant sous le bord plutot qu'en retrecissant.
+    clip: true
+
+    Rectangle {
+      id: gaugeTrack
+
+      width: root.vertical ? root.gaugeThickness : root.gaugeLength - root.gaugeInset
+      height: root.vertical ? root.gaugeLength - root.gaugeInset : root.gaugeThickness
+      radius: Math.min(width, height) / 2
+      color: root.bar ? Style.selectedFillFor(root.bar.foreground, Color.accent) : Color.muted
+      anchors.centerIn: parent
+
+      Rectangle {
+        id: gaugeFill
+
+        readonly property real progress: Math.max(0, Math.min(1, root.outputVolume))
+
+        width: root.vertical ? parent.width : parent.width * progress
+        height: root.vertical ? parent.height * progress : parent.height
+        radius: parent.radius
+        color: root.accentColor
+        opacity: root.outputMuted ? 0.35 : 1
+        // Se remplit depuis la gauche a l'horizontale, depuis le bas a la verticale.
+        anchors.left: root.vertical ? undefined : parent.left
+        anchors.bottom: root.vertical ? parent.bottom : undefined
+
+        Behavior on width { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
+        Behavior on height { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
+        Behavior on opacity { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
+      }
+    }
+  }
+
+  // Halo de survol, cale sur le bouton seul : la jauge garde son propre fond.
+  Rectangle {
+    x: button.x
+    y: button.y
+    width: button.width
+    height: button.height
+    radius: Math.min(height / 2, Style.cornerRadius)
+    color: root.accentColor
+    opacity: button.tooltipHovered || root.opened ? root.accentFillOpacity : 0
+
+    Behavior on opacity {
+      NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+    }
+  }
 
   WidgetButton {
     id: button
 
+    x: root.vertical ? 0 : gauge.width
+    y: root.vertical ? gauge.height : 0
     bar: root.bar
     text: root.outputIcon()
     tooltipText: root.outputMuted ? "Muted" : "Volume " + Math.round(root.outputVolume * 100) + "%"
@@ -443,6 +569,24 @@ BarWidget {
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         ScrollBar.vertical.policy: content.implicitHeight > height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+
+        // Deploiement : le contenu glisse depuis le bord occupe par la barre et
+        // se resserre legerement, pendant que la carte fait son propre fondu.
+        // Le decalage se fait par transform, `anchors.fill` possedant deja x/y.
+        opacity: root.opened ? 1 : 0
+        scale: root.opened ? 1 : 0.97
+        transformOrigin: root.transformOriginForBar
+
+        transform: Translate {
+          x: root.opened ? 0 : root.revealOffsetX
+          y: root.opened ? 0 : root.revealOffsetY
+
+          Behavior on x { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
+          Behavior on y { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
+        }
+
+        Behavior on opacity { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
+        Behavior on scale { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
 
         Column {
           id: content
@@ -523,6 +667,7 @@ BarWidget {
               height: outputSlider.implicitHeight
               hasCursor: root.cursorActive && root.cursor === root.rowIndexOf("outputSlider", -1)
               foreground: root.foregroundColor
+              accent: root.accentColor
               outline: true
 
               HoverHandler {
@@ -533,6 +678,8 @@ BarWidget {
                 id: outputSlider
 
                 bar: root.bar
+                fillColor: root.accentColor
+                knobColor: root.accentColor
                 anchors.fill: parent
                 anchors.leftMargin: Style.space(6)
                 anchors.rightMargin: Style.space(6)
@@ -579,6 +726,7 @@ BarWidget {
               visible: !!root.source
               hasCursor: root.cursorActive && root.cursor === root.rowIndexOf("inputSlider", -1)
               foreground: root.foregroundColor
+              accent: root.accentColor
               outline: true
 
               HoverHandler {
@@ -589,6 +737,8 @@ BarWidget {
                 id: inputSlider
 
                 bar: root.bar
+                fillColor: root.accentColor
+                knobColor: root.accentColor
                 anchors.fill: parent
                 anchors.leftMargin: Style.space(6)
                 anchors.rightMargin: Style.space(6)
@@ -701,6 +851,7 @@ BarWidget {
     hasCursor: root.cursorActive && root.cursor === root.rowIndexOf(rowKind, rowIndex)
     current: selected
     foreground: root.foregroundColor
+    accent: root.accentColor
 
     HoverHandler {
       onHoveredChanged: if (hovered) root.pointCursorAt(deviceRow.rowKind, deviceRow.rowIndex)
@@ -718,9 +869,10 @@ BarWidget {
       anchors.rightMargin: Style.space(8)
       spacing: Style.space(8)
 
+      // Le peripherique en service porte l'accent : glyphe, libelle et pastille.
       Text {
         text: deviceRow.glyph
-        color: root.foregroundColor
+        color: deviceRow.selected ? root.accentColor : root.foregroundColor
         font.family: root.fontFamily
         font.pixelSize: Style.font.icon
         width: Style.space(20)
@@ -730,7 +882,7 @@ BarWidget {
 
       Text {
         text: root.deviceLabel(deviceRow.node)
-        color: root.foregroundColor
+        color: deviceRow.selected ? root.accentColor : root.foregroundColor
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
         font.bold: deviceRow.selected
@@ -743,7 +895,7 @@ BarWidget {
         width: Style.space(6)
         height: width
         radius: width / 2
-        color: Color.accent
+        color: root.accentColor
         visible: deviceRow.selected
         anchors.verticalCenter: parent.verticalCenter
       }
@@ -763,6 +915,7 @@ BarWidget {
     height: Style.space(46)
     hasCursor: root.cursorActive && root.cursor === root.rowIndexOf("stream", rowIndex)
     foreground: root.foregroundColor
+    accent: root.accentColor
 
     HoverHandler {
       onHoveredChanged: if (hovered) root.pointCursorAt("stream", streamRow.rowIndex)
@@ -822,6 +975,8 @@ BarWidget {
         id: streamSlider
 
         bar: root.bar
+        fillColor: root.accentColor
+        knobColor: root.accentColor
         width: parent.width - Style.space(4)
         x: Style.space(2)
         // Les applications peuvent depasser 100 % sans toucher au volume general.
