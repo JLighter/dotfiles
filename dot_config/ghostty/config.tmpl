@@ -72,7 +72,13 @@ font-family = RobotoMono Nerd Font Light
 font-family-bold = RobotoMono Nerd Font Bold
 font-family-bold-italic = RobotoMono Nerd Font Bold Italic
 font-family-italic = RobotoMono Nerd Font Italic
+{{ if eq .chezmoi.os "darwin" -}}
 font-size = 16
+{{- else -}}
+# 16 est calibré pour un Retina macOS : beaucoup trop gros sur les 1920x1080
+# d'Omarchy, dont le défaut est à 9. Valeur à ajuster au ressenti.
+font-size = 11
+{{- end }}
 font-style = default
 font-style-bold = default
 font-style-bold-italic = default
