@@ -6,7 +6,9 @@ theme = dark:Catppuccin Macchiato,light:Catppuccin Latte
 # Couleurs pilotées par Omarchy : le fichier est réécrit à chaque
 # `omarchy theme set`, et le `?` rend l'inclusion facultative tant qu'aucun
 # thème n'a été appliqué. Pas de `theme =` ici, il gagnerait sur ce fichier.
-config-file = ?"~/.config/omarchy/current/theme/ghostty.conf"
+# Omarchy 4 a déplacé ce chemin de ~/.config/omarchy vers ~/.local/state
+# (cf. CURRENT_THEME_PATH dans omarchy-theme-set).
+config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"
 {{- end }}
 fullscreen = false
 
@@ -67,7 +69,7 @@ desktop-notifications = true
 focus-follows-mouse = false
 
 # `omarchy font set` fait bien un sed -i sur ce fichier, mais son motif exige
-# des guillemets (font-family = "…") : les lignes ci-dessous, qui n'en ont pas,
+# des guillemets (font-family = "RobotoMono Nerd Font") : les lignes ci-dessous, qui n'en ont pas,
 # ne sont jamais réécrites. Ghostty garde donc ses quatre graisses explicites,
 # qu'Omarchy ne sait de toute façon pas gérer — il ne pose qu'une famille.
 # La police se change donc ici, pas via omarchy.
@@ -212,3 +214,10 @@ window-step-resize = false
 window-theme = {{ if eq .chezmoi.os "darwin" }}auto{{ else }}ghostty{{ end }}
 window-vsync = true
 window-width = 0
+
+# Shift+Enter en CSI-u, pour que les TUI le distinguent d'un Enter simple.
+keybind = shift+enter=csi:13;2u
+
+# L'encodage historique envoie Alt+Shift+Enter comme Alt+Enter : CSI-u permet
+# à tmux de matcher M-S-Enter.
+keybind = alt+shift+enter=csi:13;4u
