@@ -14,7 +14,9 @@ log "Paquets Homebrew"
 brew install --quiet zsh git neovim tmux fzf zoxide bat spaceship
 {{- else -}}
 log "Paquets pacman"
-sudo pacman -S --needed --noconfirm zsh git neovim tmux fzf zoxide bat
+# ttf-roboto-mono-nerd : la police de tout le système, cf. script 50-font.
+sudo pacman -S --needed --noconfirm zsh git neovim tmux fzf zoxide bat \
+    ttf-roboto-mono-nerd
 
 # spaceship n'est que dans l'AUR. yay est fourni par Omarchy.
 if command -v yay >/dev/null 2>&1; then

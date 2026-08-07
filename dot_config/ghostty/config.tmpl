@@ -33,8 +33,10 @@ auto-update = download
 auto-update = off
 {{- end }}
 
+# Fond translucide sur les deux plateformes. Le flou est laissé au compositeur
+# côté Linux (Hyprland blur, activé par Omarchy) plutôt qu'à Ghostty.
 background-blur-radius = 0
-background-opacity = 1
+background-opacity = 0.92
 
 bold-is-bright = true
 
@@ -64,10 +66,11 @@ desktop-notifications = true
 
 focus-follows-mouse = false
 
-# ATTENTION : `omarchy font set` fait un sed -i sur la ligne font-family de ce
-# fichier. Le changement tient jusqu'au prochain `chezmoi apply`, qui le
-# réécrasera. Pour changer de police durablement, éditer ici puis appliquer —
-# ou récupérer le choix d'Omarchy avec `chezmoi add ~/.config/ghostty/config`.
+# `omarchy font set` fait bien un sed -i sur ce fichier, mais son motif exige
+# des guillemets (font-family = "…") : les lignes ci-dessous, qui n'en ont pas,
+# ne sont jamais réécrites. Ghostty garde donc ses quatre graisses explicites,
+# qu'Omarchy ne sait de toute façon pas gérer — il ne pose qu'une famille.
+# La police se change donc ici, pas via omarchy.
 font-family = RobotoMono Nerd Font Light
 font-family-bold = RobotoMono Nerd Font Bold
 font-family-bold-italic = RobotoMono Nerd Font Bold Italic
