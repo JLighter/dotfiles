@@ -1,0 +1,16 @@
+#!/bin/bash
+# Recharge tmux après un changement de thème Omarchy.
+#
+# Omarchy vient de régénérer ~/.config/omarchy/current/theme/tmux.conf depuis le
+# template ; resourcer le .tmux.conf le réinjecte dans les sessions ouvertes.
+# Sans ce hook, elles gardent la palette de l'ancien thème jusqu'au prochain
+# démarrage de tmux.
+#
+# Appelé par omarchy-hook avec le nom du thème en $1 (inutilisé ici).
+
+command -v tmux &>/dev/null || exit 0
+
+# Pas de serveur tmux en cours : rien à recharger.
+tmux list-sessions &>/dev/null || exit 0
+
+tmux source-file ~/.tmux.conf

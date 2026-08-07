@@ -100,6 +100,33 @@ done
 > contient sont donc inertes. Pour les activer, ajouter
 > `source = ~/.config/hypr/envs.conf` à `~/.config/hypr/hyprland.conf`.
 
+### Suivi des thèmes
+
+`omarchy theme set <nom>` ne modifie aucun fichier de config : il réécrit le
+contenu de `~/.config/omarchy/current/theme/`. Les configs y pointent, donc elles
+suivent le thème sans que chezmoi ait quoi que ce soit à réappliquer.
+
+| App    | Mécanisme                                                                     |
+| ------ | ----------------------------------------------------------------------------- |
+| ghostty | `config-file = ?"…/current/theme/ghostty.conf"` — fourni par chaque thème      |
+| nvim   | `plugins/themes.lua` charge `…/current/theme/neovim.lua`, une spec lazy.nvim   |
+| tmux   | `themed/tmux.conf.tpl` traduit `colors.toml` en `@thm_*`, sourcé après Catppuccin |
+| btop   | natif Omarchy, le dépôt ne versionne pas `btop.conf`                          |
+
+Sur macOS, aucun de ces fichiers n'existe : ghostty et nvim retombent sur
+Catppuccin, qui suit la bascule clair/sombre du système.
+
+Le hook `hooks/theme-set.d/reload-tmux` resource `~/.tmux.conf` après un
+changement, pour que les sessions ouvertes se recolorent. Neovim n'est pas
+rechargé : un thème différent implique un autre plugin, donc `:Lazy sync` puis
+relance.
+
+> **La police est le seul point de friction.** `omarchy font set` fait un `sed -i`
+> sur la ligne `font-family` de `~/.config/ghostty/config`, que le dépôt gère —
+> le prochain `chezmoi apply` écrase donc le choix. Pour changer de police
+> durablement : l'éditer dans le dépôt, ou récupérer le choix d'Omarchy avec
+> `chezmoi add ~/.config/ghostty/config`.
+
 ## Dépendances externes
 
 - **zsh** : oh-my-zsh, plus trois plugins à cloner dans `$ZSH_CUSTOM/plugins/` —

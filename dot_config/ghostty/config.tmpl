@@ -1,6 +1,13 @@
 title = Terminal
 term = xterm-ghostty
+{{ if eq .chezmoi.os "darwin" -}}
 theme = dark:Catppuccin Macchiato,light:Catppuccin Latte
+{{- else -}}
+# Couleurs pilotées par Omarchy : le fichier est réécrit à chaque
+# `omarchy theme set`, et le `?` rend l'inclusion facultative tant qu'aucun
+# thème n'a été appliqué. Pas de `theme =` ici, il gagnerait sur ce fichier.
+config-file = ?"~/.config/omarchy/current/theme/ghostty.conf"
+{{- end }}
 fullscreen = false
 
 # herdr au lancement : première surface uniquement (initial-command).
@@ -9,7 +16,7 @@ fullscreen = false
 # Le login shell garantit le PATH complet (herdr est dans ~/.local/bin,
 # jq/hooks des plugins herdr dans /opt/homebrew/bin) si le serveur herdr
 # doit être (re)démarré par cette surface.
-initial-command = /bin/zsh --login -c "herdr"
+initial-command = {{ if eq .chezmoi.os "darwin" }}/bin/zsh{{ else }}/usr/bin/zsh{{ end }} --login -c "herdr"
 
 shell-integration = detect
 shell-integration-features = cursor,sudo,title
@@ -19,7 +26,12 @@ abnormal-command-exit-runtime = 250
 adjust-cell-height = 15%
 adjust-cell-width = 1
 
+{{ if eq .chezmoi.os "darwin" -}}
 auto-update = download
+{{- else -}}
+# Sur Arch, ghostty est mis à jour par pacman.
+auto-update = off
+{{- end }}
 
 background-blur-radius = 0
 background-opacity = 1
@@ -52,6 +64,10 @@ desktop-notifications = true
 
 focus-follows-mouse = false
 
+# ATTENTION : `omarchy font set` fait un sed -i sur la ligne font-family de ce
+# fichier. Le changement tient jusqu'au prochain `chezmoi apply`, qui le
+# réécrasera. Pour changer de police durablement, éditer ici puis appliquer —
+# ou récupérer le choix d'Omarchy avec `chezmoi add ~/.config/ghostty/config`.
 font-family = RobotoMono Nerd Font Light
 font-family-bold = RobotoMono Nerd Font Bold
 font-family-bold-italic = RobotoMono Nerd Font Bold Italic
@@ -136,6 +152,7 @@ keybind = super+zero=reset_font_size
 
 link-url = true
 
+{{ if eq .chezmoi.os "darwin" -}}
 macos-auto-secure-input = true
 macos-non-native-fullscreen = false
 macos-option-as-alt = left
@@ -143,6 +160,7 @@ macos-secure-input-indication = true
 macos-titlebar-proxy-icon = visible
 macos-titlebar-style = native
 macos-window-shadow = true
+{{- end }}
 
 minimum-contrast = 1.1
 
@@ -182,6 +200,6 @@ window-padding-x = 0
 window-padding-y = 0
 window-save-state = default
 window-step-resize = false
-window-theme = auto
+window-theme = {{ if eq .chezmoi.os "darwin" }}auto{{ else }}ghostty{{ end }}
 window-vsync = true
 window-width = 0
