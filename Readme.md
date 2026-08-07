@@ -73,6 +73,33 @@ sont **ignorés** par chezmoi : ils servent au dépôt, pas à `$HOME`.
 Pour une surcharge locale à une seule machine et non versionnée : `~/.zshrc.local`,
 sourcé en fin de `.zshrc`.
 
+## Omarchy
+
+Omarchy installe ses propres configs dans `~/.config/` et les fait évoluer via
+`omarchy update`. Pour ne pas se mettre en travers, le dépôt ne versionne que les
+fichiers qui **divergent réellement** des défauts de la distro :
+
+| Fichier                    | Écart                                          |
+| -------------------------- | ---------------------------------------------- |
+| `.config/hypr/input.conf`  | `kb_layout = us`                               |
+| `.config/hypr/envs.conf`   | variables NVIDIA                               |
+| `.config/hypr/hyprsplit.conf` | workspaces par écran — **inactif**, cf. en-tête |
+
+Tout le reste (`bindings.conf`, `looknfeel.conf`, `monitors.conf`, `hyprland.conf`…)
+est laissé à Omarchy. Pour vérifier ce qui a divergé depuis :
+
+```sh
+for f in ~/.config/hypr/*.conf; do
+    d=~/.local/share/omarchy/config/hypr/$(basename "$f")
+    [ -f "$d" ] && ! diff -q "$f" "$d" >/dev/null && echo "diverge : $(basename "$f")"
+done
+```
+
+> `~/.config/hypr/envs.conf` n'est sourcé par **aucun** fichier : `hyprland.conf`
+> ne charge que le `envs.conf` des défauts Omarchy. Les variables NVIDIA qu'il
+> contient sont donc inertes. Pour les activer, ajouter
+> `source = ~/.config/hypr/envs.conf` à `~/.config/hypr/hyprland.conf`.
+
 ## Dépendances externes
 
 - **zsh** : oh-my-zsh, plus trois plugins à cloner dans `$ZSH_CUSTOM/plugins/` —
