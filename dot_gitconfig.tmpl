@@ -1,6 +1,6 @@
 [user]
-	email = heroguelle.julien@gmail.com
-	name = JLighter
+	email = {{ .email }}
+	name = {{ .name }}
 [daemon]
   receivepack = true
 [alias]
@@ -56,5 +56,7 @@
 	rebase = true
 [merge]
   conflictstyle = zdiff3
+{{ if .work -}}
 [url "git@gitlab-stackinsat:stackinsat/"]
 	insteadOf = git@gitlab.com:stackinsat/
+{{- end }}

@@ -1,0 +1,226 @@
+{{- $darwin := eq .chezmoi.os "darwin" -}}
+# ── Performance optimizations ──
+DISABLE_AUTO_UPDATE="true"
+DISABLE_MAGIC_FUNCTIONS="true"
+DISABLE_COMPFIX="true"
+skip_global_compinit=1
+
+# Titre de terminal figé : mécanisme OMZ, au lieu d'un precmd() maison qui
+# entrait en conflit avec omz_termsupport_precmd.
+DISABLE_AUTO_TITLE="true"
+
+# ── Oh My Zsh ──
+export ZSH="$HOME/.oh-my-zsh"
+# Prompt fourni par spaceship, chargé après oh-my-zsh : laisser ZSH_THEME vide,
+# sinon OMZ chargerait un thème par-dessus.
+ZSH_THEME=""
+
+# Réglages du prompt : ~/.config/spaceship.zsh (chargé par spaceship, et
+# rechargeable à chaud via `spaceship edit`).
+
+# ── Plugins (syntax highlighting must be last) ──
+plugins=(git zsh-completions zsh-autosuggestions zsh-syntax-highlighting)
+
+# oh-my-zsh.sh appelle déjà compinit avec son propre cache journalier
+# ($ZSH_COMPDUMP) — ne pas le rappeler ici, ça doublerait compinit + compaudit.
+source $ZSH/oh-my-zsh.sh
+
+# ── Spaceship ──
+{{ if $darwin -}}
+# Homebrew : `brew install spaceship` (dépend de zsh-async).
+# spaceship.zsh fait `export -r SPACESHIP_ROOT` vers un chemin versionné du
+# Cellar. Un shell enfant en hérite, et après `brew upgrade spaceship` ce
+# chemin n'existe plus : le source échoue alors sur chaque lib. On repart donc
+# de la détection. L'unset échoue sans bruit si spaceship est déjà chargé ici.
+{{ else -}}
+# Arch : `yay -S spaceship-prompt` (dépend de zsh-async).
+# Le chemin d'installation a bougé selon les versions du paquet AUR, d'où la
+# liste de candidats plutôt qu'un chemin en dur.
+{{ end -}}
+unset SPACESHIP_ROOT SPACESHIP_VERSION 2>/dev/null
+
+for _spaceship in \
+{{ if $darwin -}}
+    "${HOMEBREW_PREFIX:-/opt/homebrew}/opt/spaceship/spaceship.zsh"
+{{- else -}}
+    /usr/lib/spaceship-prompt/spaceship.zsh \
+    /usr/share/zsh/site-functions/spaceship.zsh \
+    "$HOME/.local/share/spaceship-prompt/spaceship.zsh"
+{{- end }}
+do
+    [ -r "$_spaceship" ] && source "$_spaceship" && break
+done
+unset _spaceship
+
+# ── Autosuggest ──
+ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE="20"
+ZSH_AUTOSUGGEST_USE_ASYNC=1
+
+# ── Historique (HISTSIZE/SAVEHIST d'OMZ sont à 50000/10000) ──
+HISTSIZE=200000
+SAVEHIST=200000
+setopt HIST_IGNORE_ALL_DUPS HIST_REDUCE_BLANKS
+
+# ── Éditeur ──
+export EDITOR="nvim"
+export VISUAL="$EDITOR"
+
+# ── Alias expansion ──
+globalias() {
+   if [[ $LBUFFER =~ '[a-zA-Z0-9]+$' ]]; then
+       zle _expand_alias
+       zle expand-word
+   fi
+   zle self-insert
+}
+zle -N globalias
+bindkey " " globalias
+bindkey "^[[Z" magic-space
+bindkey -M isearch " " magic-space
+
+# ── Agent SSH ──
+{{ if $darwin -}}
+# Fourni par launchd sur macOS (SSH_AUTH_SOCK toujours défini) : rien à lancer
+# ici. Cf. AddKeysToAgent/UseKeychain dans ~/.ssh/config.
+{{ else -}}
+# Sur Arch, l'unité systemd --user ssh-agent expose le socket. Fallback sur un
+# agent lancé à la demande si l'unité n'est pas active.
+if [ -z "$SSH_AUTH_SOCK" ]; then
+    export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/ssh-agent.socket"
+    [ -S "$SSH_AUTH_SOCK" ] || eval "$(ssh-agent -s -a "$SSH_AUTH_SOCK")" >/dev/null 2>&1
+fi
+{{ end }}
+# ── Go ──
+{{ if $darwin -}}
+export GOPATH="$HOME/Documents/Personal/Go"
+{{ else -}}
+export GOPATH="$HOME/go"
+{{ end -}}
+export GOBIN="$HOME/.local/go/bin"
+
+{{ if $darwin }}
+# X11 pour les outils lancés depuis un terminal macOS (XQuartz).
+export DISPLAY=:0
+{{ end }}
+[ -f "$HOME/.ssh_aliases" ] && source "$HOME/.ssh_aliases"
+
+# ── Alias ──
+# NB : ce fichier était déployé mais jamais sourcé avant la migration chezmoi.
+[ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
+
+# ── Lazy-load CLI completions (deferred until first use) ──
+_lazy_completion() {
+    local cmd=$1
+    eval "
+        ${cmd}() {
+            unfunction ${cmd}
+            source <(command ${cmd} completion zsh)
+            ${cmd} \"\$@\"
+        }
+    "
+}
+
+for cmd in kubectl minikube helm kind kn; do
+    command -v $cmd &>/dev/null && _lazy_completion $cmd
+done
+
+# ── Terraform + AWS: single bashcompinit ──
+autoload -U +X bashcompinit && bashcompinit
+command -v terraform &>/dev/null && complete -o nospace -C "$(which terraform)" terraform
+command -v aws &>/dev/null && complete -C "$(which aws_completer)" aws
+
+# ── Java ──
+{{ if $darwin -}}
+command -v mvn &>/dev/null && export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+{{ else -}}
+command -v mvn &>/dev/null && [ -d /usr/lib/jvm/java-21-openjdk ] && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+{{ end }}
+{{- if $darwin }}
+# ── Azure: lazy-loaded ──
+if command -v az &>/dev/null; then
+    az() {
+        unfunction az
+        source /opt/homebrew/etc/bash_completion.d/az
+        az "$@"
+    }
+fi
+{{ end }}
+# ── GitHub Copilot CLI: lazy-loaded ──
+if command -v github-copilot-cli &>/dev/null; then
+    ghcs() {
+        unfunction ghcs 2>/dev/null
+        eval "$(github-copilot-cli alias -- zsh)"
+        ghcs "$@"
+    }
+fi
+
+# ── Fzf ──
+if [ -f ~/.fzf.zsh ]; then
+    source ~/.fzf.zsh
+    export FZF_DEFAULT_OPTS="--bind ctrl-a:select-all,ctrl-d:deselect-all,ctrl-t:toggle-all"
+fi
+
+# ── Zoxide ──
+command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
+
+# ── Envman ──
+[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
+
+# ── Conda: lazy-loaded ──
+conda() {
+    unfunction conda
+    local __conda_setup
+    __conda_setup="$("$HOME/.miniconda/bin/conda" 'shell.zsh' 'hook' 2>/dev/null)"
+    if [ $? -eq 0 ]; then
+        eval "$__conda_setup"
+    else
+        if [ -f "$HOME/.miniconda/etc/profile.d/conda.sh" ]; then
+            . "$HOME/.miniconda/etc/profile.d/conda.sh"
+        else
+            export PATH="$HOME/.miniconda/bin:$PATH"
+        fi
+    fi
+    unset __conda_setup
+    conda "$@"
+}
+
+# ── Bun ──
+if [ -d "$HOME/.bun" ]; then
+    export BUN_INSTALL="$HOME/.bun"
+    [ -s "$BUN_INSTALL/_bun" ] && source "$BUN_INSTALL/_bun"
+    export PATH="$PATH:$BUN_INSTALL/bin"
+fi
+
+command -v bat &>/dev/null && export BAT_THEME="kanagawa"
+
+# ── PATH additions ──
+[[ -d ~/.npm-globals ]] && export PATH="$PATH:$HOME/.npm-globals/bin"
+[[ -d ~/.local/bin ]]   && export PATH="$PATH:$HOME/.local/bin"
+export K9S_CONFIG_DIR="$HOME/.config/k9s"
+export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+export PATH="$PATH:$HOME/.local/go/bin"
+
+{{ if $darwin -}}
+export PNPM_HOME="$HOME/Library/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+
+export PATH="$PATH:$HOME/.lmstudio/bin"
+export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
+export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
+export PATH="$PATH:/opt/homebrew/opt/python/libexec/bin"
+
+[ -f "$HOME/Downloads/google-cloud-sdk/path.zsh.inc" ] && . "$HOME/Downloads/google-cloud-sdk/path.zsh.inc"
+{{ else -}}
+export PNPM_HOME="$HOME/.local/share/pnpm"
+[[ -d "$PNPM_HOME" ]] && export PATH="$PNPM_HOME:$PATH"
+{{ end }}
+# ── Herdr ──
+# La garde `command -v` évite un shell cassé sur une machine où herdr n'est pas
+# encore installé.
+if command -v herdr &>/dev/null; then
+    export OPENCODE_PORT=4096
+    eval "$(herdr completion zsh)"
+fi
+
+# ── Surcharges locales, non versionnées ──
+[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"

@@ -1,0 +1,19 @@
+{{- /* Chemins relatifs à $HOME (cible), pas au dépôt source. */ -}}
+
+# ── Fichiers du dépôt qui ne doivent pas atterrir dans $HOME ──────────────────
+Readme.md
+
+{{ if ne .chezmoi.os "darwin" }}
+# ── macOS uniquement ─────────────────────────────────────────────────────────
+.hushlogin
+{{ end }}
+
+{{ if ne .chezmoi.os "linux" }}
+# ── Omarchy / Linux uniquement ───────────────────────────────────────────────
+# Overrides Hyprland & co : ne doivent jamais être déployés sur macOS.
+.config/hypr
+.config/waybar
+.config/walker
+.config/mako
+.config/omarchy
+{{ end }}

@@ -49,8 +49,8 @@
     "learning-output-style@claude-plugins-official": true,
     "terraform-skill@antonbabenko": true,
     "pyright-lsp@claude-plugins-official": true,
-    "qodo-skills@claude-plugins-official": true
+    "qodo@claude-plugins-official": true
   },
-  "voiceEnabled": false,
-  "language": "French"
+  "language": "French",
+  "voiceEnabled": false
 }

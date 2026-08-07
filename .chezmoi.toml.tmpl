@@ -1,0 +1,14 @@
+{{- /* Généré dans ~/.config/chezmoi/chezmoi.toml au premier `chezmoi init`.
+       Les réponses sont mémorisées : les `chezmoi init` suivants ne redemandent
+       que ce qui manque. */ -}}
+{{- $name  := promptStringOnce . "name"  "Nom pour git" "Julien Heroguelle" -}}
+{{- $email := promptStringOnce . "email" "Email git" -}}
+{{- $work  := promptBoolOnce   . "work"  "Machine professionnelle" -}}
+
+# Le dépôt reste en ~/.dotfiles plutôt qu'en ~/.local/share/chezmoi (défaut).
+sourceDir = {{ printf "%s/.dotfiles" .chezmoi.homeDir | quote }}
+
+[data]
+    name = {{ $name | quote }}
+    email = {{ $email | quote }}
+    work = {{ $work }}
