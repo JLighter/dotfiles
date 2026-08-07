@@ -246,15 +246,20 @@ Item {
               Clock { bar: root }
             }
 
-            Row {
+            // Reseau et son partagent une seule pastille : ce sont deux
+            // reglages systeme voisins, et la jauge de volume s'y deplie.
+            Island {
               anchors.right: parent.right
               anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
-              spacing: root.islandGap
 
-              Island { Network { bar: root } }
+              Row {
+                spacing: 0
 
-              Island { Audio { bar: root } }
+                Network { bar: root }
+
+                Audio { bar: root }
+              }
             }
           }
         }
@@ -280,15 +285,18 @@ Item {
               Clock { bar: root }
             }
 
-            Column {
+            Island {
               anchors.bottom: parent.bottom
               anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
-              spacing: root.islandGap
 
-              Island { Network { bar: root } }
+              Column {
+                spacing: 0
 
-              Island { Audio { bar: root } }
+                Network { bar: root }
+
+                Audio { bar: root }
+              }
             }
           }
         }
