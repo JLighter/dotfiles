@@ -6,13 +6,14 @@ onboarding = false
 # ════════════════════════════════════════════════════════════
 
 [theme]
-# Catppuccin, comme dans tmux. auto_switch suit le thème clair/sombre du
-# terminal hôte (Ghostty window-theme = auto) — remplace les hooks tmux
-# client-dark-theme / client-light-theme + reload-theme.sh.
-name = "catppuccin"
-auto_switch = false
-dark_name = "catppuccin"
-light_name = "catppuccin-latte"
+# Le thème built-in « terminal » rend l'UI avec les couleurs ANSI du terminal
+# hôte, au lieu d'une palette figée. herdr suit donc Ghostty sans rien savoir
+# de l'OS : le thème Omarchy sur Arch (réécrit à chaque `omarchy theme set`),
+# la bascule clair/sombre Catppuccin sur macOS.
+#
+# Rend auto_switch / dark_name / light_name inutiles : ils basculaient entre
+# deux thèmes herdr, alors qu'il n'y en a plus qu'un, dérivé du terminal.
+name = "terminal"
 
 [keys]
 # Même prefix que dans tmux (C-space au lieu du C-b par défaut de herdr).
