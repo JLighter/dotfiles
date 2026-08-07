@@ -356,6 +356,123 @@ BarWidget {
     passwordText = ""
   }
 
+  // --- Test de debit ---------------------------------------------------------
+  // `omarchy-network-speedtest <down|up>` sature le lien dans une direction et
+  // emet un releve en Mbit/s par seconde jusqu'a ce qu'on l'arrete. On tient
+  // chaque direction 5 s, puis on enchaine sur l'autre, en gardant le dernier
+  // releve de chacune.
+
+  property bool speedTestRunning: false
+  property bool speedTestHasRun: false
+  property string speedTestPhase: ""
+  property string speedTestDownload: ""
+  property string speedTestUpload: ""
+  property string speedTestError: ""
+  property string speedTestStderr: ""
+  // Distingue l'arret volontaire en fin de phase d'un vrai echec du helper.
+  property bool speedTestExpectedStop: false
+
+  function runSpeedTest() {
+    if (speedTestProc.running || !online) return
+
+    speedTestError = ""
+    speedTestDownload = ""
+    speedTestUpload = ""
+    speedTestHasRun = true
+    speedTestRunning = true
+    startSpeedTestPhase("down")
+  }
+
+  function startSpeedTestPhase(phase) {
+    speedTestExpectedStop = false
+    speedTestPhase = phase
+    speedTestStderr = ""
+    speedTestProc.command = ["omarchy-network-speedtest", phase]
+    speedTestProc.running = true
+    speedTestPhaseTimer.restart()
+  }
+
+  function stopSpeedTestPhase() {
+    speedTestPhaseTimer.stop()
+    if (speedTestProc.running) {
+      speedTestExpectedStop = true
+      speedTestProc.running = false
+      return
+    }
+    finishSpeedTestPhase()
+  }
+
+  function finishSpeedTestPhase() {
+    if (speedTestPhase === "down") {
+      startSpeedTestPhase("up")
+      return
+    }
+
+    speedTestPhase = ""
+    speedTestRunning = false
+    speedTestExpectedStop = false
+  }
+
+  function updateSpeedTestLine(line) {
+    var value = parseFloat(line)
+    if (!isFinite(value) || value < 0) return
+
+    if (speedTestPhase === "down") speedTestDownload = String(value)
+    else if (speedTestPhase === "up") speedTestUpload = String(value)
+    speedTestError = ""
+  }
+
+  function formatMbps(raw) {
+    if (!raw) return "—"
+
+    var value = Number(raw)
+    if (!isFinite(value) || value <= 0) return "—"
+    return (value < 10 ? value.toFixed(1) : Math.round(value)) + " Mb/s"
+  }
+
+  Process {
+    id: speedTestProc
+
+    stdout: SplitParser {
+      onRead: function(line) { root.updateSpeedTestLine(line) }
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.speedTestStderr = String(text || "").trim()
+    }
+    onExited: function(exitCode) {
+      speedTestPhaseTimer.stop()
+
+      if (!root.speedTestExpectedStop && exitCode !== 0) {
+        root.speedTestError = root.speedTestStderr || "Speed test failed"
+        root.speedTestPhase = ""
+        root.speedTestRunning = false
+        return
+      }
+
+      root.speedTestExpectedStop = false
+      root.finishSpeedTestPhase()
+    }
+  }
+
+  Timer {
+    id: speedTestPhaseTimer
+    interval: 5000
+    onTriggered: root.stopSpeedTestPhase()
+  }
+
+  // Le test sature volontairement le lien : le laisser courir apres la
+  // fermeture du panneau gaspillerait de la bande passante sans rien afficher.
+  function abortSpeedTest() {
+    if (!speedTestRunning) return
+
+    speedTestPhaseTimer.stop()
+    speedTestPhase = ""
+    speedTestRunning = false
+    speedTestExpectedStop = true
+    speedTestProc.running = false
+  }
+
   // --- DNS -------------------------------------------------------------------
 
   readonly property var dnsProviders: ["DHCP", "Cloudflare", "Google", "Custom"]
@@ -428,10 +545,12 @@ BarWidget {
       cursor = 0
       cursorActive = false
       refresh(true)
-    } else if (wifiDevice) {
-      // Le scan consomme : on l'arrete des que le panneau se ferme.
-      wifiDevice.scannerEnabled = false
+      return
     }
+
+    // Le scan comme le test de debit consomment : on les coupe a la fermeture.
+    if (wifiDevice) wifiDevice.scannerEnabled = false
+    abortSpeedTest()
   }
 
   readonly property bool primaryInstance: {
@@ -449,6 +568,7 @@ BarWidget {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
+    function speedtest(): void { root.open(); root.runSpeedTest() }
   }
 
   // --- Curseur clavier -------------------------------------------------------
@@ -458,6 +578,7 @@ BarWidget {
 
   readonly property var rows: {
     var list = []
+    if (online) list.push({ kind: "speed", index: 0 })
     for (var i = 0; i < dnsProviders.length; i++) list.push({ kind: "dns", index: i })
     for (var j = 0; j < wifiRows.length; j++) list.push({ kind: "wifi", index: j })
     return list
@@ -478,7 +599,8 @@ BarWidget {
     var row = cursor >= 0 && cursor < rows.length ? rows[cursor] : null
     if (!row) return
 
-    if (row.kind === "dns") setDns(dnsProviders[row.index])
+    if (row.kind === "speed") runSpeedTest()
+    else if (row.kind === "dns") setDns(dnsProviders[row.index])
     else if (row.kind === "wifi") {
       var target = wifiRows[row.index]
       if (!target) return
@@ -523,6 +645,12 @@ BarWidget {
       : "Offline"
     fixedWidth: root.vertical ? root.islandSize : Math.max(Style.space(24), root.islandRadius * 2)
     fixedHeight: root.islandSize
+    // L'encre du glyphe ethernet ne remplit pas sa boite symetriquement : elle
+    // penche de 1,5 px vers la droite. `rightExtraMargin` decale le label de la
+    // moitie de sa valeur vers la gauche, ce qui le recentre dans l'ilot sans
+    // toucher a la largeur, tenue par `fixedWidth`. La compensation suit
+    // l'echelle du theme, comme le bearing qu'elle corrige.
+    rightExtraMargin: 3
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) {
         if (root.bar) root.bar.run("omarchy-launch-floating-terminal-with-presentation nmtui")
@@ -660,6 +788,71 @@ BarWidget {
             DetailRow { label: "Upload"; value: root.formatRate(root.uploadRate) }
             DetailRow { label: "Router"; value: root.formatPing(root.info.router_ping_ms) }
             DetailRow { label: "Internet"; value: root.formatPing(root.info.internet_ping_ms) }
+          }
+
+          // ---- Test de debit ----
+          PanelIsland {
+            id: speedIsland
+
+            visible: root.online
+
+            SectionHeader {
+              text: "SPEED TEST"
+              value: root.speedTestRunning
+                ? (root.speedTestPhase === "down" ? "DOWNLOADING" : "UPLOADING")
+                : ""
+            }
+
+            DetailRow {
+              visible: root.speedTestHasRun
+              label: "Download"
+              value: root.formatMbps(root.speedTestDownload)
+            }
+
+            DetailRow {
+              visible: root.speedTestHasRun
+              label: "Upload"
+              value: root.formatMbps(root.speedTestUpload)
+            }
+
+            Text {
+              text: root.speedTestError
+              visible: root.speedTestError !== ""
+              color: root.accentColor
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
+              width: parent.width
+            }
+
+            CursorSurface {
+              width: parent.width
+              height: Style.space(30)
+              hasCursor: root.cursorActive && root.cursor === root.rowIndexOf("speed", 0)
+              foreground: root.foregroundColor
+              accent: root.accentColor
+
+              HoverHandler {
+                onHoveredChanged: if (hovered) root.pointCursorAt("speed", 0)
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                enabled: !root.speedTestRunning
+                onClicked: root.runSpeedTest()
+              }
+
+              Text {
+                text: root.speedTestRunning ? "Measuring…" : (root.speedTestHasRun ? "Run again" : "Run speed test")
+                color: root.speedTestRunning ? root.accentColor : root.foregroundColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
           }
 
           // ---- Resolveur DNS ----
