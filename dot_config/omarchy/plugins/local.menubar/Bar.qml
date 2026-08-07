@@ -75,6 +75,26 @@ Item {
 
   Process { id: launcher }
 
+  // --- Coordination des popups -----------------------------------------------
+  // Un seul panneau ouvert a la fois : en ouvrir un ferme celui qui l'etait.
+  // KeyboardPanel et PopupCard s'enregistrent ici tout seuls.
+
+  property var activePopout: null
+
+  function requestPopout(owner) {
+    if (activePopout === owner) return
+
+    if (activePopout) {
+      if ("closeForPopoutSwitch" in activePopout) activePopout.closeForPopoutSwitch()
+      else if ("close" in activePopout) activePopout.close()
+    }
+    activePopout = owner
+  }
+
+  function releasePopout(owner) {
+    if (activePopout === owner) activePopout = null
+  }
+
   // --- Tooltip partage -------------------------------------------------------
   // WidgetButton appelle showTooltip/hideTooltip sans verifier leur existence :
   // les deux doivent exister meme si un seul widget affiche un tooltip.
@@ -212,11 +232,18 @@ Item {
             }
 
             Island {
+              anchors.horizontalCenter: parent.horizontalCenter
+              anchors.verticalCenter: parent.verticalCenter
+
+              Clock { bar: root }
+            }
+
+            Island {
               anchors.right: parent.right
               anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
 
-              Clock { bar: root }
+              Audio { bar: root }
             }
           }
         }
@@ -236,11 +263,18 @@ Item {
             }
 
             Island {
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.horizontalCenter: parent.horizontalCenter
+
+              Clock { bar: root }
+            }
+
+            Island {
               anchors.bottom: parent.bottom
               anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
 
-              Clock { bar: root }
+              Audio { bar: root }
             }
           }
         }
