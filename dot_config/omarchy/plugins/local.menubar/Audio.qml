@@ -30,6 +30,10 @@ BarWidget {
   // du workspace courant.
   readonly property color accentColor: bar ? bar.accent : Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
+  // Debordement du halo, pour qu'il epouse les bords de l'ilot au lieu d'en
+  // laisser voir un liseré tout autour.
+  readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
+  readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
 
   // Le panneau arrive du bord occupe par la barre, et grandit depuis ce bord.
   readonly property string barPosition: bar ? bar.position : "top"
@@ -502,10 +506,10 @@ BarWidget {
   // a la moitie du plus petit cote, ce qui arrondissait le halo plus que
   // l'ilot qui l'entoure. Le bouton est tenu assez large pour eviter ce rabat.
   Rectangle {
-    x: button.x
-    y: button.y
-    width: button.width
-    height: button.height
+    x: button.x - root.haloInsetX
+    y: button.y - root.haloInsetY
+    width: button.width + root.haloInsetX * 2
+    height: button.height + root.haloInsetY * 2
     radius: root.islandRadius
     color: root.accentColor
     opacity: button.tooltipHovered || root.opened ? root.accentFillOpacity : 0

@@ -29,6 +29,10 @@ BarWidget {
 
   readonly property color accentColor: bar ? bar.accent : Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
+  // Debordement du halo, pour qu'il epouse les bords de l'ilot au lieu d'en
+  // laisser voir un liseré tout autour.
+  readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
+  readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
   readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -310,22 +314,53 @@ BarWidget {
 
   // --- Bouton de barre -------------------------------------------------------
 
-  // Le logo est pose a cote du bouton plutot que dedans : WidgetButton centre
-  // son texte et n'offre pas de decalage vers la droite. Un MouseArea rend la
-  // zone du logo aussi cliquable que le bouton.
+  // Au repos, seul le logo occupe la barre ; le chiffre se deplie au survol,
+  // comme la jauge du widget de volume, et l'ilot s'etire avec lui.
   readonly property int logoSize: Style.space(13)
   readonly property int logoGap: Style.space(4)
+  readonly property bool percentRevealed: widgetHover.hovered || opened
+  property int percentExtent: percentRevealed ? percentLabel.implicitWidth + logoGap : 0
 
-  implicitWidth: logoSize + logoGap + button.implicitWidth
+  Behavior on percentExtent {
+    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+  }
+
+  implicitWidth: logoGap + logoSize + percentExtent + logoGap
   implicitHeight: root.islandSize
 
   HoverHandler { id: widgetHover }
 
+  // La barre interroge `tooltipHovered` sur la cible du tooltip pour savoir si
+  // elle doit le garder affiche : c'est le widget entier qui joue ce role ici,
+  // faute de WidgetButton pour le faire.
+  readonly property bool tooltipHovered: widgetHover.hovered
+  readonly property string tooltipText: {
+    if (!authenticated) return "Claude · " + (statusText || "not signed in")
+
+    var parts = []
+    for (var i = 0; i < limits.length; i++) {
+      var entry = limits[i]
+      if (entry) parts.push(limitLabel(entry) + " " + Math.round(Number(entry.percent || 0)) + "%")
+    }
+    return parts.length > 0 ? parts.join("\n") : "Claude"
+  }
+
+  onTooltipHoveredChanged: {
+    if (!bar) return
+
+    if (tooltipHovered) bar.showTooltip(root, tooltipText)
+    else bar.hideTooltip(root)
+  }
+
   Rectangle {
     anchors.fill: parent
+    anchors.leftMargin: -root.haloInsetX
+    anchors.rightMargin: -root.haloInsetX
+    anchors.topMargin: -root.haloInsetY
+    anchors.bottomMargin: -root.haloInsetY
     radius: root.islandRadius
     color: root.accentColor
-    opacity: widgetHover.hovered || root.opened ? root.accentFillOpacity : 0
+    opacity: root.percentRevealed ? root.accentFillOpacity : 0
 
     Behavior on opacity {
       NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
@@ -347,41 +382,36 @@ BarWidget {
     opacity: root.authenticated ? 1 : 0.4
   }
 
-  MouseArea {
-    x: 0
-    width: root.logoSize + root.logoGap
+  // Le chiffre glisse hors du cadre quand celui-ci se replie, plutot que de
+  // retrecir.
+  Item {
+    x: root.logoGap + root.logoSize
+    width: root.percentExtent
     height: parent.height
+    clip: true
+
+    Text {
+      id: percentLabel
+
+      x: root.logoGap
+      text: root.leadingPercent >= 0 ? root.leadingPercent + "%" : "—"
+      // Le quota qui s'approche de la limite passe en accent.
+      color: root.leadingPercent >= 80 ? root.accentColor : root.foregroundColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+      renderType: Text.NativeRendering
+      anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
+  MouseArea {
+    id: button
+
+    anchors.fill: parent
     cursorShape: Qt.PointingHandCursor
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     onClicked: function(mouse) {
       if (mouse.button === Qt.RightButton) root.refresh(true)
-      else root.toggle()
-    }
-  }
-
-  WidgetButton {
-    id: button
-
-    x: root.logoSize + root.logoGap
-    bar: root.bar
-    // Le logo tient lieu d'etiquette ; le texte ne porte que le chiffre.
-    text: root.leadingPercent >= 0 ? root.leadingPercent + "%" : "—"
-    tooltipText: {
-      if (!root.authenticated) return "Claude · " + (root.statusText || "not signed in")
-
-      var parts = []
-      for (var i = 0; i < root.limits.length; i++) {
-        var entry = root.limits[i]
-        if (entry) parts.push(root.limitLabel(entry) + " " + Math.round(Number(entry.percent || 0)) + "%")
-      }
-      return parts.length > 0 ? parts.join("\n") : "Claude"
-    }
-    // Le quota qui s'approche de la limite passe en accent.
-    foreground: root.leadingPercent >= 80 ? root.accentColor : root.foregroundColor
-    fixedHeight: root.islandSize
-    horizontalMargin: 5
-    onPressed: function(mouseButton) {
-      if (mouseButton === Qt.RightButton) root.refresh(true)
       else root.toggle()
     }
   }

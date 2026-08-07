@@ -42,6 +42,11 @@ Item {
   readonly property int islandSize: vertical ? Style.bar.sizeVertical : Style.bar.sizeHorizontal
   readonly property int islandGap: Style.space(4)
   readonly property int islandPadding: Style.space(3)
+  // De combien le halo d'un widget doit deborder pour epouser les bords de son
+  // ilot. Le padding ne s'applique que dans l'axe de la barre : dans l'autre,
+  // l'ilot colle deja au contenu.
+  readonly property int islandPaddingX: vertical ? 0 : islandPadding
+  readonly property int islandPaddingY: vertical ? islandPadding : 0
   readonly property int islandRadius: Math.min(Style.cornerRadius, islandSize / 2)
   readonly property int barSize: islandSize + islandGap * 2
   // Distance entre le premier/dernier ilot et le bord de l'ecran.

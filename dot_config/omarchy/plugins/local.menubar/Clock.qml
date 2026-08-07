@@ -25,14 +25,22 @@ BarWidget {
   readonly property color accentColor: bar ? bar.accent : Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
+  readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
+  readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  // Halo de survol, dans la meme teinte que le workspace actif.
+  // Halo de survol, dans la meme teinte que le workspace actif. Il deborde du
+  // padding de l'ilot pour en epouser les bords au lieu d'en laisser voir un
+  // liseré tout autour.
   Rectangle {
     anchors.fill: parent
-    radius: Math.min(height / 2, Style.cornerRadius)
+    anchors.leftMargin: -root.haloInsetX
+    anchors.rightMargin: -root.haloInsetX
+    anchors.topMargin: -root.haloInsetY
+    anchors.bottomMargin: -root.haloInsetY
+    radius: bar && bar.islandRadius !== undefined ? bar.islandRadius : Style.cornerRadius
     color: root.accentColor
     opacity: button.tooltipHovered ? root.accentFillOpacity : 0
 

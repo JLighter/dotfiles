@@ -20,6 +20,8 @@ BarWidget {
   readonly property color accentColor: bar ? bar.accent : Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
+  readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
+  readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
 
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
@@ -76,9 +78,15 @@ BarWidget {
         implicitWidth: workspaceButton.implicitWidth
         implicitHeight: workspaceButton.implicitHeight
 
-        // Halo de survol, dans la meme teinte que le workspace actif.
+        // Halo de survol, dans la meme teinte que le workspace actif. Il deborde
+        // du padding de l'ilot : les pastilles extremes en epousent alors les
+        // bords, et celles du milieu restent centrees sur leur chiffre.
         Rectangle {
           anchors.fill: parent
+          anchors.leftMargin: -root.haloInsetX
+          anchors.rightMargin: -root.haloInsetX
+          anchors.topMargin: -root.haloInsetY
+          anchors.bottomMargin: -root.haloInsetY
           radius: Math.min(height / 2, Style.cornerRadius)
           color: root.accentColor
           opacity: workspaceButton.tooltipHovered ? root.accentFillOpacity : 0

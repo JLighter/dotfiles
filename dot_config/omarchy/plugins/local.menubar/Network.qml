@@ -28,6 +28,10 @@ BarWidget {
 
   readonly property color accentColor: bar ? bar.accent : Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
+  // Debordement du halo, pour qu'il epouse les bords de l'ilot au lieu d'en
+  // laisser voir un liseré tout autour.
+  readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
+  readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
   readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -622,10 +626,10 @@ BarWidget {
   implicitHeight: button.implicitHeight
 
   Rectangle {
-    x: button.x
-    y: button.y
-    width: button.width
-    height: button.height
+    x: button.x - root.haloInsetX
+    y: button.y - root.haloInsetY
+    width: button.width + root.haloInsetX * 2
+    height: button.height + root.haloInsetY * 2
     radius: root.islandRadius
     color: root.accentColor
     opacity: button.tooltipHovered || root.opened ? root.accentFillOpacity : 0
