@@ -246,12 +246,15 @@ Item {
               Clock { bar: root }
             }
 
-            Island {
+            Row {
               anchors.right: parent.right
               anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
+              spacing: root.islandGap
 
-              Audio { bar: root }
+              Island { Network { bar: root } }
+
+              Island { Audio { bar: root } }
             }
           }
         }
@@ -277,12 +280,15 @@ Item {
               Clock { bar: root }
             }
 
-            Island {
+            Column {
               anchors.bottom: parent.bottom
               anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
+              spacing: root.islandGap
 
-              Audio { bar: root }
+              Island { Network { bar: root } }
+
+              Island { Audio { bar: root } }
             }
           }
         }
