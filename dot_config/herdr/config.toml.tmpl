@@ -50,7 +50,13 @@ previous_agent = "prefix+shift+a"
 # ctrl+h/j/k/l déplace le focus de pane (miroir des chords globaux).
 # ctrl+h direct au bord gauche ne peut PAS déborder sur la sidebar :
 # un chord direct n'a qu'un comportement global dans herdr.
+{{ if eq .chezmoi.os "darwin" -}}
 workspace_picker = ["prefix+w", "alt+w"]
+{{- else -}}
+# Sur Omarchy, ALT est le modificateur d'Hyprland (couche i3) : il capte alt+w
+# avant herdr. Seul prefix+w subsiste.
+workspace_picker = ["prefix+w"]
+{{- end }}
 navigate_workspace_down = "j"
 navigate_workspace_up = "k"
 navigate_pane_left = "ctrl+h"
@@ -61,8 +67,13 @@ navigate_pane_right = "ctrl+l"
 # Onglets en accès direct : alt+1..9 (en plus du prefix+1..9 par défaut).
 # Sous Ghostty/macOS, ne répond que si la touche Option envoie Alt
 # (macos-option-as-alt) — sinon prefix+1..9 reste la voie normale.
+{{ if eq .chezmoi.os "darwin" -}}
 [keys.indexed]
 tabs = "alt"
+{{- else -}}
+# Pas de tabs = "alt" ici : Hyprland capte alt+1..9 pour ses workspaces, herdr
+# ne les recevrait jamais. prefix+1..9 reste la voie d'accès aux onglets.
+{{- end }}
 
 # ── Navigation vim-like ctrl+h/j/k/l (plugin vim-herdr-navigation) ────
 # Bindings directs (sans prefix) vers le plugin : si le pane focalisé

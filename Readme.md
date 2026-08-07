@@ -100,6 +100,33 @@ done
 > contient sont donc inertes. Pour les activer, ajouter
 > `source = ~/.config/hypr/envs.conf` à `~/.config/hypr/hyprland.conf`.
 
+### Raccourcis : trois couches
+
+| Couche | Modificateur | Où                                                     |
+| ------ | ------------ | ------------------------------------------------------ |
+| WM     | `ALT`        | `.config/hypr/bindings.conf` — reprise des gestes i3    |
+| Mux    | `CTRL+SPACE` | prefix tmux **et** prefix herdr, identiques             |
+| Éditeur| `SPACE`      | leader LazyVim, défaut du framework                     |
+
+La couche WM reprend i3 (`$mod` y valait `Mod1` = ALT) : `ALT+Return` terminal,
+`ALT+D` lanceur, `ALT+J/K/L/;` focus, `ALT+Shift+*` déplacement, `ALT+1..0`
+workspaces, `ALT+Shift+A` fermer. Chaque geste repris est `unbind` de son
+équivalent SUPER, pour qu'il n'existe qu'une seule façon de le faire.
+
+Sans équivalent en dwindle, donc non repris : `mod+s` (stacking), `mod+w`
+(tabbed), `mod+a` (focus parent), `mod+h`/`mod+v` (split explicite — `ALT+E`
+togglesplit s'en rapproche) et `mod+space` (bascule focus flottant/tuilé).
+
+> Deux conséquences assumées. `ALT+lettre` n'atteint plus les menus des
+> applications GTK/Qt (`ALT+F` fichier, `ALT+E` édition) — c'était déjà le cas
+> sous i3. Et sur Linux, herdr perd `alt+1..9` et `alt+w`, captés par Hyprland :
+> son config est templatisé pour ne garder que `prefix+1..9` et `prefix+w`, qui
+> fonctionnent sur les deux machines. Sur macOS, herdr conserve ses accès ALT.
+
+Versionner `bindings.conf` a un coût : ce fichier ne suivra plus les évolutions
+d'Omarchy. À comparer au défaut après une mise à jour majeure avec la boucle
+`diff` ci-dessous.
+
 ### Suivi des thèmes
 
 `omarchy theme set <nom>` ne modifie aucun fichier de config : il réécrit le
