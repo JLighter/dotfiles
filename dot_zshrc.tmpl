@@ -223,4 +223,9 @@ if command -v herdr &>/dev/null; then
 fi
 
 # ── Surcharges locales, non versionnées ──
-[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+# `if` plutôt que `&&` : le statut de la dernière commande de ce fichier devient
+# celui du premier prompt, et un `&&` non pris renverrait 1 — que spaceship
+# afficherait en « ✘1 » à chaque ouverture de shell.
+if [ -f "$HOME/.zshrc.local" ]; then
+    source "$HOME/.zshrc.local"
+fi
