@@ -595,66 +595,65 @@ BarWidget {
           spacing: Style.space(12)
 
           // ---- Sortie courante ----
-          Item {
-            width: parent.width
-            implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight)
+          PanelIsland {
 
-            Text {
-              id: heroIcon
-
-              text: root.outputIcon()
-              color: root.foregroundColor
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.display
-              opacity: root.outputMuted ? 0.5 : 1
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.toggleOutputMute()
-              }
-            }
-
-            Column {
-              id: heroLabels
-
-              anchors.left: heroIcon.right
-              anchors.leftMargin: Style.space(14)
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight)
 
               Text {
-                text: "Audio"
+                id: heroIcon
+
+                text: root.outputIcon()
                 color: root.foregroundColor
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
-                elide: Text.ElideRight
-                width: parent.width
+                font.pixelSize: Style.font.display
+                opacity: root.outputMuted ? 0.5 : 1
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.toggleOutputMute()
+                }
               }
 
-              Text {
-                text: root.outputMuted ? "MUTED" : root.deviceLabel(root.sink).toUpperCase()
-                color: root.mutedColor
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                font.letterSpacing: 1.2
-                elide: Text.ElideRight
-                width: parent.width
+              Column {
+                id: heroLabels
+
+                anchors.left: heroIcon.right
+                anchors.leftMargin: Style.space(14)
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(2)
+
+                Text {
+                  text: "Audio"
+                  color: root.foregroundColor
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.title
+                  font.bold: true
+                  elide: Text.ElideRight
+                  width: parent.width
+                }
+
+                Text {
+                  text: root.outputMuted ? "MUTED" : root.deviceLabel(root.sink).toUpperCase()
+                  color: root.mutedColor
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  font.letterSpacing: 1.2
+                  elide: Text.ElideRight
+                  width: parent.width
+                }
               }
             }
           }
 
-          PanelSeparator { foreground: root.foregroundColor }
-
           // ---- Sortie : volume + peripheriques ----
-          Column {
-            width: parent.width
-            spacing: Style.space(4)
+          PanelIsland {
 
             SectionHeader {
               text: "OUTPUT"
@@ -697,7 +696,7 @@ BarWidget {
                 required property var modelData
                 required property int index
 
-                width: content.width
+                width: parent.width
                 node: modelData
                 rowKind: "sink"
                 rowIndex: index
@@ -709,9 +708,7 @@ BarWidget {
           }
 
           // ---- Entree : volume + peripheriques ----
-          Column {
-            width: parent.width
-            spacing: Style.space(4)
+          PanelIsland {
             visible: !!root.source || root.displaySources.length > 0
 
             SectionHeader {
@@ -756,7 +753,7 @@ BarWidget {
                 required property var modelData
                 required property int index
 
-                width: content.width
+                width: parent.width
                 node: modelData
                 rowKind: "source"
                 rowIndex: index
@@ -768,9 +765,7 @@ BarWidget {
           }
 
           // ---- Mixeur par application ----
-          Column {
-            width: parent.width
-            spacing: Style.space(4)
+          PanelIsland {
             visible: root.displayStreams.length > 0
 
             SectionHeader { text: "APPS" }
@@ -782,7 +777,7 @@ BarWidget {
                 required property var modelData
                 required property int index
 
-                width: content.width
+                width: parent.width
                 node: modelData
                 rowIndex: index
               }
@@ -798,6 +793,32 @@ BarWidget {
   readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  // Voile tire du texte plutot qu'une couleur fixe : l'ilot se detache aussi
+  // bien sur un fond de carte clair que sombre.
+  readonly property color islandFill: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.06)
+
+  // Ilot de section : meme vocabulaire que les ilots de la barre, transpose
+  // sur le fond opaque de la carte.
+  component PanelIsland: Rectangle {
+    default property alias content: holder.data
+    property int padding: Style.space(10)
+    property alias spacing: holder.spacing
+
+    width: parent.width
+    implicitHeight: holder.implicitHeight + padding * 2
+    radius: Style.cornerRadius
+    color: root.islandFill
+
+    Column {
+      id: holder
+
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.margins: parent.padding
+      spacing: Style.space(4)
+    }
+  }
 
   // En-tete de section : intitule a gauche, valeur a droite.
   component SectionHeader: Item {
