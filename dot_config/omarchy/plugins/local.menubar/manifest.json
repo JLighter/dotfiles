@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "local.menubar",
+  "name": "Menubar",
+  "version": "1.0.0",
+  "author": "jlighter",
+  "license": "MIT",
+  "description": "Barre minimale : workspaces au bord de depart, horloge au bord oppose",
+  "kinds": ["bar"],
+  "entryPoints": { "bar": "Bar.qml" }
+}
