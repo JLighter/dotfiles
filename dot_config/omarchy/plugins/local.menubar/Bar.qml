@@ -257,6 +257,8 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               spacing: root.islandGap
 
+              Island { System { bar: root } }
+
               Island { ClaudeUsage { bar: root } }
 
               // Reseau et son partagent une seule pastille : ce sont deux
@@ -300,6 +302,8 @@ Item {
               anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
               spacing: root.islandGap
+
+              Island { System { bar: root } }
 
               Island { ClaudeUsage { bar: root } }
 
