@@ -257,6 +257,15 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               spacing: root.islandGap
 
+              // L'ilot cliamp s'efface entierement quand le lecteur ne tourne
+              // pas : `Row` ignore les enfants invisibles, y compris pour
+              // l'espacement.
+              Island {
+                visible: cliampWidget.visible
+
+                Cliamp { id: cliampWidget; bar: root }
+              }
+
               Island { System { bar: root } }
 
               Island { ClaudeUsage { bar: root } }
@@ -302,6 +311,12 @@ Item {
               anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
               spacing: root.islandGap
+
+              Island {
+                visible: cliampWidgetVertical.visible
+
+                Cliamp { id: cliampWidgetVertical; bar: root }
+              }
 
               Island { System { bar: root } }
 
