@@ -236,12 +236,21 @@ Item {
           Item {
             anchors.fill: parent
 
-            Island {
+            Row {
               anchors.left: parent.left
               anchors.leftMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
+              spacing: root.islandGap
 
-              Workspaces { bar: root }
+              Island { Workspaces { bar: root } }
+
+              // S'efface entierement quand rien n'attend d'etre mis a jour :
+              // `Row` ignore les enfants invisibles, y compris pour l'espacement.
+              Island {
+                visible: updatesWidget.hasUpdates
+
+                Updates { id: updatesWidget; bar: root }
+              }
             }
 
             Island {
@@ -257,13 +266,8 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               spacing: root.islandGap
 
-              // L'ilot cliamp s'efface entierement quand le lecteur ne tourne
-              // pas : `Row` ignore les enfants invisibles, y compris pour
-              // l'espacement.
               Island {
-                visible: cliampWidget.visible
-
-                Cliamp { id: cliampWidget; bar: root }
+                Cliamp { bar: root }
               }
 
               Island { System { bar: root } }
@@ -291,12 +295,19 @@ Item {
           Item {
             anchors.fill: parent
 
-            Island {
+            Column {
               anchors.top: parent.top
               anchors.topMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
+              spacing: root.islandGap
 
-              Workspaces { bar: root }
+              Island { Workspaces { bar: root } }
+
+              Island {
+                visible: updatesWidgetVertical.hasUpdates
+
+                Updates { id: updatesWidgetVertical; bar: root }
+              }
             }
 
             Island {
@@ -313,9 +324,7 @@ Item {
               spacing: root.islandGap
 
               Island {
-                visible: cliampWidgetVertical.visible
-
-                Cliamp { id: cliampWidgetVertical; bar: root }
+                Cliamp { bar: root }
               }
 
               Island { System { bar: root } }
