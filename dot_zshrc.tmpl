@@ -5,9 +5,11 @@ DISABLE_MAGIC_FUNCTIONS="true"
 DISABLE_COMPFIX="true"
 skip_global_compinit=1
 
-# Titre de terminal figé : mécanisme OMZ, au lieu d'un precmd() maison qui
-# entrait en conflit avec omz_termsupport_precmd.
-DISABLE_AUTO_TITLE="true"
+# Titre de terminal laissé à omz_termsupport_precmd/preexec : répertoire courant
+# entre deux commandes, commande en cours pendant l'exécution. Ne pas écrire de
+# precmd() maison à côté, les deux se marcheraient dessus — et ne pas remettre
+# DISABLE_AUTO_TITLE, qui coupe ce hook et laisse foot retomber sur son titre par
+# défaut, la chaîne littérale « foot ».
 
 # ── Oh My Zsh ──
 export ZSH="$HOME/.oh-my-zsh"
