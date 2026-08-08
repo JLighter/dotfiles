@@ -23,10 +23,10 @@ o.bind("SUPER + SHIFT + W", "Typora", { launch = "typora --enable-wayland-ime" }
 -- ajoute juste une seconde façon de faire le même geste.
 --
 -- Trois défauts Omarchy tombent au passage, H étant la seule des quatre touches
--- à être libre :
---   SUPER+J  Toggle window split      → plus de raccourci
---   SUPER+L  Toggle workspace layout  → plus de raccourci
---   SUPER+K  Show key bindings        → déplacé sur SUPER+SHIFT+K ci-dessous
+-- à être libre. Aucun n'est perdu, tous se replient plus bas :
+--   SUPER+J  Toggle window split      → SUPER+[
+--   SUPER+L  Toggle workspace layout  → SUPER+]
+--   SUPER+K  Show key bindings        → SUPER+SHIFT+K
 hl.unbind("SUPER + J")
 hl.unbind("SUPER + K")
 hl.unbind("SUPER + L")
@@ -45,6 +45,16 @@ for _, entry in ipairs(focus_directions) do
     hl.dsp.focus({ direction = entry.direction })
   )
 end
+
+-- ── Relogement des trois évincés ──
+-- Les crochets sont libres et voisins du hjkl. Ils vont par paire, comme les
+-- deux bascules de disposition : [ découpe la fenêtre, ] change le layout du
+-- workspace entier.
+--
+-- xkbcommon nomme ces keysyms en minuscules ; « BRACKETLEFT » ne matcherait pas,
+-- même piège que le « comma » des défauts Omarchy.
+o.bind("SUPER + bracketleft", "Toggle window split", hl.dsp.layout("togglesplit"))
+o.bind("SUPER + bracketright", "Toggle workspace layout", "omarchy-hyprland-workspace-layout-toggle")
 
 -- L'antisèche des raccourcis mérite de survivre à son éviction par SUPER+K.
 o.bind("SUPER + SHIFT + K", "Show key bindings", "omarchy-menu-keybindings")
