@@ -13,7 +13,7 @@
 
 SPACESHIP_PROMPT_ASYNC=true
 SPACESHIP_PROMPT_ADD_NEWLINE=true
-SPACESHIP_CHAR_SYMBOL="⚡"
+SPACESHIP_CHAR_SYMBOL="> "
 
 # user/host ne s'affichent qu'en SSH (défaut) : savoir « qui » sans « où »
 # n'aide pas. exec_time était déjà calculé par son hook precmd sans être
