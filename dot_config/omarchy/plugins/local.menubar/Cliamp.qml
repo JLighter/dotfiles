@@ -6,8 +6,8 @@ import Quickshell.Services.Mpris
 import qs.Commons
 import qs.Ui
 
-// Widget cliamp : lecture en cours dans la barre, contrôles et favoris radio
-// au clic, avec le spectre en direct.
+// Widget cliamp : le spectre en direct dans la barre, et au clic un panneau
+// avec le morceau, les controles et les favoris radio.
 //
 // Trois canaux, chacun pour ce qu'il fait de mieux :
 //   - MPRIS (org.mpris.MediaPlayer2.cliamp) pour l'etat et le transport : il
@@ -17,8 +17,8 @@ import qs.Ui
 //   - le socket de commande, via la CLI, pour le volume et les stations, que
 //     MPRIS n'expose pas.
 //
-// Le widget disparait de la barre quand cliamp ne tourne pas, plutot que d'y
-// laisser une coquille vide.
+// Le widget reste dans la barre meme sans cliamp : le spectre retombe a plat
+// et le bouton de lecture du panneau demarre alors le lecteur.
 BarWidget {
   id: root
   moduleName: "local.menubar.cliamp"
@@ -147,7 +147,9 @@ BarWidget {
   Process {
     id: bandStream
 
-    command: ["cliamp", "visstream", "--fps", "30"]
+    // 20 images par seconde : le spectre de la barre reste fluide a l'oeil et
+    // c'est un tiers de trames en moins a analyser que les 30 par defaut.
+    command: ["cliamp", "visstream", "--fps", "20"]
     // Pilote imperativement, et non par binding : le timer de relance doit
     // pouvoir le rallumer apres un redemarrage de cliamp.
     running: false
@@ -157,9 +159,9 @@ BarWidget {
     }
   }
 
-  // Le flux ne tourne que panneau ouvert : 30 frames par seconde pour un
-  // spectre invisible seraient du gaspillage pur.
-  readonly property bool bandStreamWanted: opened && available
+  // Le flux tourne des que cliamp est la : le spectre vit dans la barre, pas
+  // seulement dans le panneau.
+  readonly property bool bandStreamWanted: available
 
   onBandStreamWantedChanged: {
     if (bandStreamWanted) bandStream.running = true
@@ -187,6 +189,24 @@ BarWidget {
 
     commandProc.command = ["cliamp"].concat(args)
     commandProc.running = true
+  }
+
+  // Demarre cliamp headless : il sert alors son socket et publie MPRIS, ce qui
+  // suffit au transport, au volume et aux stations. Le spectre, lui, reste
+  // plat — cliamp ne calcule ses bandes que derriere son interface.
+  // `execDetached` plutot qu'un Process : le lecteur doit survivre au shell.
+  function launchPlayer() {
+    Quickshell.execDetached(["cliamp", "--daemon"])
+  }
+
+  // Le bouton principal demarre le lecteur quand il est absent, et bascule
+  // lecture/pause sinon.
+  function primaryAction() {
+    if (!available) {
+      launchPlayer()
+      return
+    }
+    player.togglePlaying()
   }
 
   // Volume en dB, borne comme cliamp lui-meme.
@@ -379,6 +399,8 @@ BarWidget {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
+    // Demarre cliamp s'il est absent, bascule lecture/pause sinon.
+    function play(): void { root.primaryAction() }
   }
 
   // --- Glyphes ---------------------------------------------------------------
@@ -392,42 +414,21 @@ BarWidget {
 
   // --- Bouton de barre -------------------------------------------------------
 
-  // Au repos, seule la note occupe la barre ; le titre se deplie au survol,
-  // comme le pourcentage du widget Claude.
-  readonly property int glyphWidth: Style.space(13)
-  readonly property int contentGap: Style.space(5)
-  readonly property bool titleRevealed: (widgetHover.hovered || opened) && titleLabel.text !== ""
-  property int titleExtent: titleRevealed ? Math.min(titleLabel.implicitWidth, Style.space(180)) + contentGap : 0
+  // Dans la barre, le spectre est tout : ni note, ni titre, rien qui se deplie
+  // au survol. Le detail vit dans le panneau.
+  readonly property int contentGap: Style.space(6)
+  readonly property int spectrumWidth: Style.space(52)
 
-  Behavior on titleExtent {
-    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
-  }
+  // Le widget reste en place meme sans cliamp : le spectre retombe a plat et
+  // sert alors de bouton pour ouvrir le panneau, d'ou on demarre le lecteur.
+  readonly property var displayBands: bands.length > 0 ? bands : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-  visible: available
-  implicitWidth: available ? contentGap + glyphWidth + titleExtent + contentGap : 0
-  implicitHeight: available ? islandSize : 0
+  implicitWidth: contentGap + spectrumWidth + contentGap
+  implicitHeight: islandSize
 
+  // Pas de tooltip ici : rien ne doit surgir au survol du spectre. Le titre,
+  // l'artiste et l'etat de lecture vivent dans le panneau.
   HoverHandler { id: widgetHover }
-
-  // La barre interroge `tooltipHovered` sur la cible pour savoir si le tooltip
-  // doit rester affiche.
-  readonly property bool tooltipHovered: widgetHover.hovered
-  readonly property string tooltipText: {
-    if (!available) return "cliamp"
-
-    var parts = []
-    if (displayTitle !== "") parts.push(displayTitle)
-    if (trackArtist !== "") parts.push(trackArtist)
-    parts.push(playing ? "playing" : "paused")
-    return parts.join(" · ")
-  }
-
-  onTooltipHoveredChanged: {
-    if (!bar) return
-
-    if (tooltipHovered) bar.showTooltip(root, tooltipText)
-    else bar.hideTooltip(root)
-  }
 
   Rectangle {
     anchors.fill: parent
@@ -444,40 +445,51 @@ BarWidget {
     }
   }
 
-  Text {
-    id: glyphLabel
+  Item {
+    id: barSpectrum
 
     x: root.contentGap
-    width: root.glyphWidth
-    text: root.playing ? root.glyphNote : root.glyphPause
-    color: root.playing ? root.foregroundColor : root.mutedColor
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.body
-    renderType: Text.NativeRendering
-    horizontalAlignment: Text.AlignHCenter
-    anchors.verticalCenter: parent.verticalCenter
-  }
-
-  // Le titre glisse hors du cadre quand celui-ci se replie, plutot que de
-  // retrecir.
-  Item {
-    x: root.contentGap + root.glyphWidth
-    width: root.titleExtent
+    width: root.spectrumWidth
     height: parent.height
-    clip: true
 
-    Text {
-      id: titleLabel
+    readonly property int columnGap: Math.max(1, Style.space(1))
+    readonly property real columnWidth: root.displayBands.length > 0
+      ? (root.spectrumWidth - columnGap * (root.displayBands.length - 1)) / root.displayBands.length
+      : 0
+    // Hauteur utile : on garde un peu d'air en haut et en bas de l'ilot.
+    readonly property real usableHeight: height - Style.space(10)
 
-      x: root.contentGap
-      width: Style.space(180)
-      text: root.displayTitle
-      color: root.playing ? root.foregroundColor : root.mutedColor
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.body
-      renderType: Text.NativeRendering
-      elide: Text.ElideRight
+    Row {
       anchors.verticalCenter: parent.verticalCenter
+      height: barSpectrum.usableHeight
+      spacing: barSpectrum.columnGap
+
+      Repeater {
+        model: root.displayBands
+
+        Item {
+          required property var modelData
+
+          width: barSpectrum.columnWidth
+          height: barSpectrum.usableHeight
+
+          Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: Math.max(1, parent.height * Math.max(0, Math.min(1, modelData)))
+            radius: width / 2
+            // Estompe tant que rien ne joue : la ligne plate ne doit pas
+            // ressembler a un spectre fige.
+            color: root.playing ? root.accentColor : root.mutedColor
+            opacity: root.available ? 1 : 0.5
+
+            // Sans lissage, le spectre scintille a 20 images par seconde.
+            Behavior on height {
+              NumberAnimation { duration: 90; easing.type: Easing.OutQuad }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -488,7 +500,7 @@ BarWidget {
     cursorShape: Qt.PointingHandCursor
     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
     onClicked: function(mouse) {
-      if (mouse.button === Qt.MiddleButton && root.available) root.player.togglePlaying()
+      if (mouse.button === Qt.MiddleButton) root.primaryAction()
       else root.toggle()
     }
     onWheel: function(wheel) {
@@ -514,7 +526,7 @@ BarWidget {
 
       anchors.fill: parent
       onCloseRequested: root.close()
-      onActivateRequested: if (root.available) root.player.togglePlaying()
+      onActivateRequested: root.primaryAction()
       onMoveRequested: function(dx, dy) {
         if (dx > 0) root.setVolume(root.volumeDb + 1)
         else if (dx < 0) root.setVolume(root.volumeDb - 1)
@@ -577,7 +589,7 @@ BarWidget {
                 spacing: Style.space(2)
 
                 Text {
-                  text: root.displayTitle || "Nothing playing"
+                  text: root.available ? (root.displayTitle || "Nothing playing") : "cliamp not running"
                   color: root.foregroundColor
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.title
@@ -699,8 +711,9 @@ BarWidget {
               TransportButton {
                 glyph: root.playing ? root.glyphPause : root.glyphPlay
                 highlighted: true
-                actionEnabled: root.available && root.player.canTogglePlaying
-                onActivated: if (root.available) root.player.togglePlaying()
+                // Toujours actif : sans cliamp, ce bouton le demarre.
+                actionEnabled: !root.available || root.player.canTogglePlaying
+                onActivated: root.primaryAction()
               }
 
               TransportButton {
