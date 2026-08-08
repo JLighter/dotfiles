@@ -225,39 +225,91 @@ BarWidget {
 
   // --- Bouton de barre -------------------------------------------------------
 
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  // Au repos, seule la puce occupe la barre ; les mesures se deplient au
+  // survol. Pas de tooltip : ce serait dire deux fois la meme chose.
+  // Largeur impaire volontairement : l'ilot fait alors une largeur impaire lui
+  // aussi, son centre tombe sur un pixel entier et le glyphe — 9 pixels d'encre
+  // — s'y aligne exactement. Avec une largeur paire, le centrage tombe entre
+  // deux pixels et laisse un demi-pixel d'ecart, d'un cote ou de l'autre.
+  readonly property int glyphWidth: Style.space(15)
+  readonly property int contentGap: Style.space(5)
+  readonly property bool valuesRevealed: widgetHover.hovered || opened
+  property int valuesExtent: valuesRevealed ? valuesLabel.implicitWidth + contentGap : 0
+
+  Behavior on valuesExtent {
+    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+  }
+
+  // L'ensemble passe en accent des qu'une des deux mesures s'emballe.
+  readonly property color readingColor: cpuPercent >= alertThreshold || memPercent >= alertThreshold
+    ? accentColor
+    : foregroundColor
+
+  implicitWidth: contentGap + glyphWidth + valuesExtent + contentGap
+  implicitHeight: islandSize
+
+  HoverHandler { id: widgetHover }
 
   Rectangle {
-    x: button.x - root.haloInsetX
-    y: button.y - root.haloInsetY
-    width: button.width + root.haloInsetX * 2
-    height: button.height + root.haloInsetY * 2
+    anchors.fill: parent
+    anchors.leftMargin: -root.haloInsetX
+    anchors.rightMargin: -root.haloInsetX
+    anchors.topMargin: -root.haloInsetY
+    anchors.bottomMargin: -root.haloInsetY
     radius: root.islandRadius
     color: root.accentColor
-    opacity: button.tooltipHovered || root.opened ? root.accentFillOpacity : 0
+    opacity: root.valuesRevealed ? root.accentFillOpacity : 0
 
     Behavior on opacity {
       NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
     }
   }
 
-  WidgetButton {
+  Text {
+    id: glyphLabel
+
+    // L'encre de la puce ne remplit pas sa boite symetriquement : elle penche
+    // vers la droite. On decale la boite d'autant, a l'echelle du theme comme
+    // le bearing qu'elle corrige.
+    x: root.contentGap - Style.spaceReal(1)
+    width: root.glyphWidth
+    text: root.glyphCpu
+    color: root.readingColor
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.body
+    renderType: Text.NativeRendering
+    horizontalAlignment: Text.AlignHCenter
+    anchors.verticalCenter: parent.verticalCenter
+  }
+
+  // Les mesures glissent hors du cadre quand celui-ci se replie.
+  Item {
+    x: root.contentGap + root.glyphWidth
+    width: root.valuesExtent
+    height: parent.height
+    clip: true
+
+    Text {
+      id: valuesLabel
+
+      x: root.contentGap
+      text: Math.round(root.cpuPercent) + "%  " + root.glyphMemory + " " + Math.round(root.memPercent) + "%"
+      color: root.readingColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+      renderType: Text.NativeRendering
+      anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
+  MouseArea {
     id: button
 
-    bar: root.bar
-    text: root.vertical
-      ? Math.round(root.cpuPercent) + ""
-      : root.glyphCpu + " " + Math.round(root.cpuPercent) + "%  " + root.glyphMemory + " " + Math.round(root.memPercent) + "%"
-    // L'ensemble passe en accent des qu'une des deux mesures s'emballe.
-    foreground: root.cpuPercent >= root.alertThreshold || root.memPercent >= root.alertThreshold
-      ? root.accentColor
-      : root.foregroundColor
-    tooltipText: "CPU " + Math.round(root.cpuPercent) + "% · RAM " + root.formatGib(root.memUsedKib) + " / " + root.formatGib(root.memTotalKib)
-    fixedHeight: root.islandSize
-    horizontalMargin: 6
-    onPressed: function(mouseButton) {
-      if (mouseButton === Qt.RightButton) {
+    anchors.fill: parent
+    cursorShape: Qt.PointingHandCursor
+    acceptedButtons: Qt.LeftButton | Qt.RightButton
+    onClicked: function(mouse) {
+      if (mouse.button === Qt.RightButton) {
         if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop")
       } else {
         root.toggle()

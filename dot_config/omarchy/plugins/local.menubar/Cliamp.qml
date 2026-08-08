@@ -524,6 +524,10 @@ BarWidget {
     }
 
     Text {
+      // L'encre de l'antenne ne remplit pas sa boite symetriquement : elle
+      // penche d'un pixel vers la droite. On decale la boite d'autant, a
+      // l'echelle du theme comme le bearing qu'elle corrige.
+      x: -Style.spaceReal(1)
       width: root.glyphWidth
       text: root.glyphRadio
       color: root.available ? root.foregroundColor : root.mutedColor

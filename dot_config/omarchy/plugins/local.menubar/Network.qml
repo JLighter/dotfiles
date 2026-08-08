@@ -155,10 +155,11 @@ BarWidget {
 
   Process { id: actionProc }
 
-  // Releve rapide tant que le panneau est ouvert — les debits n'ont de sens
-  // qu'affiches — et lent le reste du temps, juste pour tenir l'icone a jour.
+  // Releve rapide tant que les debits sont a l'ecran — panneau ouvert ou
+  // simple survol — et lent le reste du temps, juste pour tenir l'icone a
+  // jour. Sans cela, le survol montrerait un debit vieux de dix secondes.
   Timer {
-    interval: root.opened ? 1500 : 10000
+    interval: root.opened || root.ratesRevealed ? 1500 : 10000
     running: true
     repeat: true
     triggeredOnStart: true
@@ -622,41 +623,84 @@ BarWidget {
 
   // --- Bouton de barre -------------------------------------------------------
 
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  // Au repos, seul l'etat du lien occupe la barre ; les debits instantanes se
+  // deplient au survol.
+  readonly property int glyphWidth: Style.space(14)
+  readonly property int contentGap: Style.space(5)
+  readonly property bool ratesRevealed: widgetHover.hovered || opened
+  property int ratesExtent: ratesRevealed ? ratesLabel.implicitWidth + contentGap : 0
+
+  Behavior on ratesExtent {
+    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+  }
+
+  implicitWidth: contentGap + glyphWidth + ratesExtent + contentGap
+  implicitHeight: islandSize
+
+  HoverHandler { id: widgetHover }
 
   Rectangle {
-    x: button.x - root.haloInsetX
-    y: button.y - root.haloInsetY
-    width: button.width + root.haloInsetX * 2
-    height: button.height + root.haloInsetY * 2
+    anchors.fill: parent
+    anchors.leftMargin: -root.haloInsetX
+    anchors.rightMargin: -root.haloInsetX
+    anchors.topMargin: -root.haloInsetY
+    anchors.bottomMargin: -root.haloInsetY
     radius: root.islandRadius
     color: root.accentColor
-    opacity: button.tooltipHovered || root.opened ? root.accentFillOpacity : 0
+    opacity: root.ratesRevealed ? root.accentFillOpacity : 0
 
     Behavior on opacity {
       NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
     }
   }
 
-  WidgetButton {
+  Text {
+    id: glyphLabel
+
+    // L'encre du glyphe ethernet ne remplit pas sa boite symetriquement : elle
+    // penche vers la droite. On decale la boite d'autant, a l'echelle du theme
+    // comme le bearing qu'elle corrige.
+    x: root.contentGap - Style.spaceReal(1.5)
+    width: root.glyphWidth
+    text: root.connectionGlyph()
+    color: root.online ? root.foregroundColor : root.mutedColor
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.body
+    renderType: Text.NativeRendering
+    horizontalAlignment: Text.AlignHCenter
+    anchors.verticalCenter: parent.verticalCenter
+  }
+
+  // Les debits glissent hors du cadre quand celui-ci se replie.
+  Item {
+    x: root.contentGap + root.glyphWidth
+    width: root.ratesExtent
+    height: parent.height
+    clip: true
+
+    Text {
+      id: ratesLabel
+
+      x: root.contentGap
+      text: root.online
+        ? "↓ " + root.formatRate(root.downloadRate) + "  ↑ " + root.formatRate(root.uploadRate)
+        : "Offline"
+      color: root.foregroundColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      renderType: Text.NativeRendering
+      anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
+  MouseArea {
     id: button
 
-    bar: root.bar
-    text: root.connectionGlyph()
-    tooltipText: root.online
-      ? root.connectionLabel() + (root.ipAddress ? " · " + root.ipAddress : "")
-      : "Offline"
-    fixedWidth: root.vertical ? root.islandSize : Math.max(Style.space(24), root.islandRadius * 2)
-    fixedHeight: root.islandSize
-    // L'encre du glyphe ethernet ne remplit pas sa boite symetriquement : elle
-    // penche de 1,5 px vers la droite. `rightExtraMargin` decale le label de la
-    // moitie de sa valeur vers la gauche, ce qui le recentre dans l'ilot sans
-    // toucher a la largeur, tenue par `fixedWidth`. La compensation suit
-    // l'echelle du theme, comme le bearing qu'elle corrige.
-    rightExtraMargin: 3
-    onPressed: function(mouseButton) {
-      if (mouseButton === Qt.RightButton) {
+    anchors.fill: parent
+    cursorShape: Qt.PointingHandCursor
+    acceptedButtons: Qt.LeftButton | Qt.RightButton
+    onClicked: function(mouse) {
+      if (mouse.button === Qt.RightButton) {
         if (root.bar) root.bar.run("omarchy-launch-floating-terminal-with-presentation nmtui")
       } else {
         root.toggle()
