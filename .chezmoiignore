@@ -4,6 +4,19 @@
 Readme.md
 bootstrap.sh
 
+# Une session Claude Code ouverte ici pose des fichiers vides à la racine pour
+# empêcher un gestionnaire de paquets de remonter au-dessus du projet. Elle les
+# masque à git via .git/info/exclude, mais chezmoi lit le disque : sans ces
+# lignes il les prend pour des sources et bloque l'`apply` sur une confirmation
+# TTY. Voir la section « claude-code scrub-mode stubs » de .git/info/exclude.
+# Les stubs commençant par un point (.npmrc, .yarnrc…) n'ont pas besoin d'y
+# figurer : chezmoi ignore déjà tout fichier source commençant par un point.
+bunfig.toml
+package.json
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
 {{ if ne .chezmoi.os "darwin" }}
 # ── macOS uniquement ─────────────────────────────────────────────────────────
 .hushlogin
