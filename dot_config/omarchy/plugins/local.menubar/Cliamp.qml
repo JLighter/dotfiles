@@ -414,16 +414,35 @@ BarWidget {
 
   // --- Bouton de barre -------------------------------------------------------
 
-  // Dans la barre, le spectre est tout : ni note, ni titre, rien qui se deplie
-  // au survol. Le detail vit dans le panneau.
+  // La barre montre l'un ou l'autre, jamais les deux : le spectre des que
+  // quelque chose joue, sinon une antenne radio dont le libelle se deplie au
+  // survol. Le widget reste en place meme sans cliamp — le panneau est alors
+  // le seul endroit d'ou le demarrer.
   readonly property int contentGap: Style.space(6)
   readonly property int spectrumWidth: Style.space(52)
+  readonly property int glyphWidth: Style.space(14)
 
-  // Le widget reste en place meme sans cliamp : le spectre retombe a plat et
-  // sert alors de bouton pour ouvrir le panneau, d'ou on demarre le lecteur.
+  readonly property bool idle: !playing
+
+  property int spectrumExtent: idle ? 0 : spectrumWidth
+  property int glyphExtent: idle ? glyphWidth : 0
+  property int labelExtent: idle && widgetHover.hovered ? idleLabel.implicitWidth + contentGap : 0
+
+  Behavior on spectrumExtent {
+    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+  }
+  Behavior on glyphExtent {
+    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+  }
+  Behavior on labelExtent {
+    NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+  }
+
+  // Le spectre a besoin d'un modele meme a vide, sinon ses colonnes
+  // disparaissent au lieu de retomber a plat pendant la transition.
   readonly property var displayBands: bands.length > 0 ? bands : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-  implicitWidth: contentGap + spectrumWidth + contentGap
+  implicitWidth: contentGap + glyphExtent + labelExtent + spectrumExtent + contentGap
   implicitHeight: islandSize
 
   // Pas de tooltip ici : rien ne doit surgir au survol du spectre. Le titre,
@@ -445,12 +464,56 @@ BarWidget {
     }
   }
 
+  // Antenne radio et son libelle, quand rien ne joue.
+  Item {
+    x: root.contentGap
+    width: root.glyphExtent
+    height: parent.height
+    clip: true
+    opacity: root.idle ? 1 : 0
+
+    Behavior on opacity {
+      NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+    }
+
+    Text {
+      width: root.glyphWidth
+      text: root.glyphRadio
+      color: root.available ? root.foregroundColor : root.mutedColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+      renderType: Text.NativeRendering
+      horizontalAlignment: Text.AlignHCenter
+      anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
+  Item {
+    x: root.contentGap + root.glyphExtent
+    width: root.labelExtent
+    height: parent.height
+    clip: true
+
+    Text {
+      id: idleLabel
+
+      x: root.contentGap
+      text: "Radio"
+      color: root.available ? root.foregroundColor : root.mutedColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+      renderType: Text.NativeRendering
+      anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
   Item {
     id: barSpectrum
 
-    x: root.contentGap
-    width: root.spectrumWidth
+    x: root.contentGap + root.glyphExtent + root.labelExtent
+    width: root.spectrumExtent
     height: parent.height
+    clip: true
 
     readonly property int columnGap: Math.max(1, Style.space(1))
     readonly property real columnWidth: root.displayBands.length > 0
