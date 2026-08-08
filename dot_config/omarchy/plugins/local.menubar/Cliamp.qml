@@ -191,12 +191,21 @@ BarWidget {
     commandProc.running = true
   }
 
-  // Demarre cliamp dans un terminal, et non en `--daemon` : sans interface,
-  // cliamp ne calcule pas ses bandes et `visstream` ne renvoie que des
-  // « bands timeout » — le spectre resterait plat. Le helper refocalise la
-  // fenetre si cliamp est deja ouvert, plutot que d'en lancer une seconde.
+  // Demarre cliamp sans lui ouvrir de fenetre.
+  //
+  // Les deux voies evidentes echouent : en `--daemon`, cliamp ne calcule pas
+  // ses bandes et `visstream` ne renvoie que des « bands timeout », donc pas de
+  // spectre ; dans un terminal, il en ouvre un, ce qu'on ne veut pas. Ce qu'il
+  // lui faut n'est pas une fenetre mais un terminal — `script` lui en fournit
+  // un, un pseudo-terminal jete dans /dev/null : cliamp dessine son interface
+  // dans le vide, sans que rien ne s'affiche, et calcule bien ses bandes.
+  //
+  // Le tout passe par un shell : `setsid` doit forker et rendre la main pour
+  // que le lecteur survive au shell graphique, ce qu'un appel direct ne fait
+  // pas.
   function launchPlayer() {
-    if (bar) bar.run("omarchy-launch-or-focus-tui cliamp")
+    Quickshell.execDetached(["bash", "-c",
+      "setsid script -qfc 'cliamp --auto-play' /dev/null >/dev/null 2>&1 &"])
   }
 
   // Le bouton principal demarre le lecteur quand il est absent, et bascule
