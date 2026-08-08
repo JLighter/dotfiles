@@ -191,12 +191,12 @@ BarWidget {
     commandProc.running = true
   }
 
-  // Demarre cliamp headless : il sert alors son socket et publie MPRIS, ce qui
-  // suffit au transport, au volume et aux stations. Le spectre, lui, reste
-  // plat — cliamp ne calcule ses bandes que derriere son interface.
-  // `execDetached` plutot qu'un Process : le lecteur doit survivre au shell.
+  // Demarre cliamp dans un terminal, et non en `--daemon` : sans interface,
+  // cliamp ne calcule pas ses bandes et `visstream` ne renvoie que des
+  // « bands timeout » — le spectre resterait plat. Le helper refocalise la
+  // fenetre si cliamp est deja ouvert, plutot que d'en lancer une seconde.
   function launchPlayer() {
-    Quickshell.execDetached(["cliamp", "--daemon"])
+    if (bar) bar.run("omarchy-launch-or-focus-tui cliamp")
   }
 
   // Le bouton principal demarre le lecteur quand il est absent, et bascule
