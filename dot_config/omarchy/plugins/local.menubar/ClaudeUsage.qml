@@ -294,6 +294,18 @@ BarWidget {
     close()
   }
 
+  // Claude Desktop, quand il est installe. Le `command -v` en garde rend le
+  // geste inoffensif sur une machine sans l'application : le shell sort sans
+  // rien faire au lieu de remonter une commande introuvable. L'app est en
+  // instance unique, un second lancement ramene la fenetre existante.
+  readonly property string desktopAppCommand:
+    "command -v claude-desktop >/dev/null 2>&1 && exec claude-desktop"
+
+  function openDesktopApp() {
+    if (!bar) return
+    bar.run(desktopAppCommand)
+  }
+
   readonly property bool primaryInstance: {
     var window = root.QsWindow ? root.QsWindow.window : null
     var screens = Quickshell.screens
@@ -409,9 +421,10 @@ BarWidget {
 
     anchors.fill: parent
     cursorShape: Qt.PointingHandCursor
-    acceptedButtons: Qt.LeftButton | Qt.RightButton
+    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
     onClicked: function(mouse) {
-      if (mouse.button === Qt.RightButton) root.refresh(true)
+      if (mouse.button === Qt.RightButton) root.openDesktopApp()
+      else if (mouse.button === Qt.MiddleButton) root.refresh(true)
       else root.toggle()
     }
   }
