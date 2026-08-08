@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "local.notifications",
+  "name": "Notification toasts",
+  "version": "1.0.0",
+  "author": "jlighter",
+  "license": "MIT",
+  "description": "Rend les toasts de omarchy.notifications aux couleurs de local.menubar",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

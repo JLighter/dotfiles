@@ -276,6 +276,8 @@ Item {
 
               Island { ClaudeUsage { bar: root } }
 
+              Island { Notifications { bar: root } }
+
               // Ecrans, reseau et son partagent une seule pastille : ce sont
               // trois reglages systeme voisins, et la jauge de volume s'y
               // deplie.
@@ -335,6 +337,8 @@ Item {
               Island { System { bar: root } }
 
               Island { ClaudeUsage { bar: root } }
+
+              Island { Notifications { bar: root } }
 
               Island {
                 Column {
