@@ -159,9 +159,47 @@ BarWidget {
     }
   }
 
-  // Le flux tourne des que cliamp est la : le spectre vit dans la barre, pas
+  // --- Presence du socket ----------------------------------------------------
+  // `visstream` parle au socket de cliamp, pas a MPRIS, et les deux ne vont pas
+  // toujours ensemble : une seconde instance de cliamp perd le nom MPRIS mais
+  // garde son socket, et un socket peut disparaitre sous une instance bien
+  // vivante. C'est donc le socket, et lui seul, qui conditionne le flux — sinon
+  // la relance forke `cliamp visstream` toutes les deux secondes dans le vide.
+
+  property bool socketPresent: false
+
+  Process {
+    id: socketProbe
+
+    command: ["test", "-S", Quickshell.env("HOME") + "/.config/cliamp/cliamp.sock"]
+    onExited: function(exitCode) { root.socketPresent = exitCode === 0 }
+  }
+
+  function probeSocket() {
+    if (!socketProbe.running) socketProbe.running = true
+  }
+
+  // Un socket ne se lit pas : FileView surveille le dossier qui le contient et
+  // on resonde a chaque mouvement.
+  FileView {
+    path: Quickshell.env("HOME") + "/.config/cliamp"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: root.probeSocket()
+  }
+
+  // Filet, pour les cas ou la notification du dossier n'arrive pas.
+  Timer {
+    interval: 10000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.probeSocket()
+  }
+
+  // Le flux tourne des que le socket est la : le spectre vit dans la barre, pas
   // seulement dans le panneau.
-  readonly property bool bandStreamWanted: available
+  readonly property bool bandStreamWanted: socketPresent
 
   onBandStreamWantedChanged: {
     if (bandStreamWanted) bandStream.running = true
