@@ -182,6 +182,44 @@ macOS, `/usr/bin/node` sur Arch. Impossible à versionner tel quel. La statuslin
 pointe donc sur `hooks/claude-hud-statusline.sh`, qui résout le runtime (bun s'il
 existe, node sinon) et la version du plugin au lancement.
 
+### Permissions
+
+Trois couches, du plus dur au plus souple :
+
+| Couche       | Portée                                             | Contournable ? |
+| ------------ | -------------------------------------------------- | -------------- |
+| `sandbox`    | isolation OS — bubblewrap sur Arch, Seatbelt sur macOS | non         |
+| `deny`       | règles Claude Code, évaluées avant tout le reste    | non par le modèle |
+| `ask`        | demande confirmation, même si une règle `allow` correspond | oui, par l'humain |
+
+Le sandbox tourne en `autoAllowBashIfSandboxed` : une commande qui tient dans
+l'isolation s'exécute sans confirmation. C'est **moins** de friction et **plus**
+de garanties qu'une liste `allow` — celle-ci est donc restée vide, elle ferait
+double emploi. Ce qui sort du sandbox (réseau vers un hôte non listé, notamment)
+retombe sur le flux de permissions normal.
+
+`deny` couvre deux familles : la lecture de secrets (`.env`, clés privées,
+`~/.ssh`, `~/.gnupg`, les credentials cloud, et le trousseau de Claude Code
+lui-même) et les commandes irréversibles. Tout `rm` récursif y est, dans ses six
+écritures possibles — `-r`, `-R`, `--recursive`, seuls ou après d'autres flags.
+`sh`, `bash` et `zsh` nus y sont aussi : c'est la moitié exécutante d'un
+`curl … | sh`, que Claude Code découpe en sous-commandes avant de les évaluer.
+
+`Edit(~/.claude/settings.json)` est refusé : les changements de config passent
+par le dépôt, donc par un diff git relu, jamais par une écriture directe.
+
+> **Limite connue sur Linux.** Six règles reposent sur un glob d'extension
+> (`*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.kdbx`, `.env.*.local`) que le sandbox
+> ne sait pas traduire en restriction noyau — `claude doctor` le signale à
+> chaque passage. La protection reste applicative : les outils de lecture et les
+> `cat`/`head`/`sed` lancés en Bash sont bloqués, un script Python qui ouvre le
+> fichier lui-même ne l'est pas. Les chemins du home, eux, sont couverts au
+> niveau OS par `sandbox.credentials.files`.
+
+`disableBypassPermissionsMode` neutralise `--dangerously-skip-permissions`, et
+`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` retire les credentials Anthropic et cloud de
+l'environnement de tous les sous-processus, sandbox ou pas.
+
 ## Dépendances externes
 
 - **zsh** : oh-my-zsh, plus trois plugins à cloner dans `$ZSH_CUSTOM/plugins/` —
