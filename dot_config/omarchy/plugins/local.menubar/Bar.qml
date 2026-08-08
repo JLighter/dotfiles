@@ -278,12 +278,14 @@ Item {
 
               Island { Notifications { bar: root } }
 
-              // Ecrans, reseau et son partagent une seule pastille : ce sont
-              // trois reglages systeme voisins, et la jauge de volume s'y
-              // deplie.
+              // Dictee, ecrans, reseau et son partagent une seule pastille : ce
+              // sont quatre reglages systeme voisins, et la jauge de volume
+              // comme la waveform de dictee s'y deplient.
               Island {
                 Row {
                   spacing: 0
+
+                  Voxtype { bar: root }
 
                   Displays { bar: root }
 
@@ -343,6 +345,8 @@ Item {
               Island {
                 Column {
                   spacing: 0
+
+                  Voxtype { bar: root }
 
                   Displays { bar: root }
 
