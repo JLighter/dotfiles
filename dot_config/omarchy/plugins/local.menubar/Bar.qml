@@ -242,7 +242,9 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               spacing: root.islandGap
 
-              Island { Workspaces { bar: root } }
+              // `barScreen` : les workspaces sont propres a chaque ecran, la
+              // barre doit donc savoir lequel elle habille.
+              Island { Workspaces { bar: root; barScreen: barWindow.screen } }
 
               // S'efface entierement quand rien n'attend d'etre mis a jour :
               // `Row` ignore les enfants invisibles, y compris pour l'espacement.
@@ -301,7 +303,7 @@ Item {
               anchors.horizontalCenter: parent.horizontalCenter
               spacing: root.islandGap
 
-              Island { Workspaces { bar: root } }
+              Island { Workspaces { bar: root; barScreen: barWindow.screen } }
 
               Island {
                 visible: updatesWidgetVertical.hasUpdates
