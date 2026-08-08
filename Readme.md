@@ -32,6 +32,11 @@ déclenche automatiquement une seule fois (`run_once_`) :
 | `30-tpm`              | gestionnaire de plugins tmux                                 |
 | `40-default-shell`    | `chsh` vers zsh — seule étape qui demande le mot de passe    |
 
+Deux exceptions à ce « une seule fois » : `35-herdr-plugins` et
+`36-claude-plugins` rejouent à chaque `apply`. Ils installent des plugins dont le
+dépôt versionne la *déclaration* mais pas le *clone* ; celui-ci peut disparaître
+sans que la déclaration bouge, et laisse alors une touche ou une statusline muette.
+
 Deux gestes manuels restent, volontairement hors script : `<C-a> I` dans tmux pour
 installer les plugins, et le premier lancement de Neovim pour LazyVim.
 
@@ -153,6 +158,29 @@ relance.
 > le prochain `chezmoi apply` écrase donc le choix. Pour changer de police
 > durablement : l'éditer dans le dépôt, ou récupérer le choix d'Omarchy avec
 > `chezmoi add ~/.config/ghostty/config`.
+
+## Claude Code
+
+`dot_claude/` versionne ce qui est *réglage* — `settings.json`, agents, skills,
+rules, hooks — et laisse dehors ce qui est *état* : sessions, historique, cache
+des plugins. La frontière est tenue par `dot_claude/.gitignore`, avec une seule
+exception, `plugins/claude-hud/config.json`, qui est bien un réglage même s'il
+vit au milieu du cache.
+
+### Statusline
+
+Le HUD de la statusline vient de [claude-hud](https://github.com/jarrodwatts/claude-hud),
+installé depuis sa propre marketplace. `settings.json` déclare la marketplace et
+active le plugin, mais le clone lui-même vit sous `~/.claude/plugins/`, hors du
+dépôt : `.chezmoiscripts/36-claude-plugins.sh` le repose s'il manque. Comme les
+plugins herdr, il rejoue à chaque `apply` plutôt qu'une seule fois, puisque le
+cache peut être purgé sans que la déclaration bouge.
+
+`/claude-hud:setup` génère normalement une ligne de commande d'une centaine de
+caractères avec le chemin absolu du runtime en dur — `/opt/homebrew/bin/node` sur
+macOS, `/usr/bin/node` sur Arch. Impossible à versionner tel quel. La statusline
+pointe donc sur `hooks/claude-hud-statusline.sh`, qui résout le runtime (bun s'il
+existe, node sinon) et la version du plugin au lancement.
 
 ## Dépendances externes
 

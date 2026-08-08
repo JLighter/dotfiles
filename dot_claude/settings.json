@@ -37,8 +37,16 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "npx -y ccstatusline@latest",
+    "command": "~/.claude/hooks/claude-hud-statusline.sh",
     "padding": 0
+  },
+  "extraKnownMarketplaces": {
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    }
   },
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
@@ -49,7 +57,8 @@
     "learning-output-style@claude-plugins-official": true,
     "terraform-skill@antonbabenko": true,
     "pyright-lsp@claude-plugins-official": true,
-    "qodo@claude-plugins-official": true
+    "qodo@claude-plugins-official": true,
+    "claude-hud@claude-hud": true
   },
   "language": "French",
   "voiceEnabled": false

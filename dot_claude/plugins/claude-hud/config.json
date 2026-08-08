@@ -1,0 +1,28 @@
+{
+  "language": "en",
+  "lineLayout": "compact",
+  "showSeparators": true,
+  "gitStatus": {
+    "enabled": true,
+    "showDirty": true,
+    "showAheadBehind": true,
+    "showFileStats": false
+  },
+  "jjStatus": {
+    "enabled": false
+  },
+  "display": {
+    "showTools": false,
+    "showAgents": true,
+    "showTodos": false,
+    "showDuration": false,
+    "showTokenBreakdown": false,
+    "showUsage": false,
+    "showConfigCounts": false,
+    "showCost": false,
+    "showSessionName": false,
+    "showSessionTokens": false,
+    "showSkills": false,
+    "showMcp": false
+  }
+}

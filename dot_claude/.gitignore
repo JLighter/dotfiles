@@ -9,7 +9,7 @@ ide/
 logs/
 paste-cache/
 plans/
-plugins/
+plugins/*
 projects/
 session-env/
 sessions/
@@ -18,6 +18,13 @@ statsig/
 tasks/
 telemetry/
 todos/
+
+# Sauf la config du HUD, qui est un réglage et non un cache.
+# `plugins/*` plutôt que `plugins/` plus haut : git ne redescend pas dans un
+# répertoire exclu, une négation seule n'aurait donc jamais été évaluée.
+!plugins/claude-hud/
+plugins/claude-hud/*
+!plugins/claude-hud/config.json
 
 # History and stats
 history.jsonl
