@@ -39,11 +39,12 @@ hl.config({
     blur = {
       enabled = true,
 
-      -- size 6 / passes 2 : un rayon modeste, mais assez de passes pour que
-      -- le flou reste lisse. L'inverse (size élevé, 1 passe) donne un flou
-      -- sale, en escalier.
-      size = 6,
-      passes = 2,
+      -- size 2 / passes 3 : un rayon court, mais assez de passes pour que le
+      -- flou reste lisse. L'inverse (size élevé, 1 passe) donne un flou sale,
+      -- en escalier — et un rayon long fait remonter le fond d'écran dans les
+      -- fenêtres translucides, au détriment du texte.
+      size = 2,
+      passes = 3,
 
       -- Indispensable côté GPU, et prérequis de xray.
       new_optimizations = true,
