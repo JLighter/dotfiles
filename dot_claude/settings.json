@@ -49,7 +49,6 @@
       "Bash(bash -)"
     ],
     "ask": [
-      "Bash(dangerouslyDisableSandbox:true)",
       "Bash(sudo *)",
       "Bash(dd *)",
       "Bash(git push *)",
@@ -137,111 +136,5 @@
     }
   },
   "language": "French",
-  "sandbox": {
-    "enabled": false,
-    "autoAllowBashIfSandboxed": true,
-    "network": {
-      "allowedDomains": [
-        "registry.npmjs.org",
-        "*.github.com",
-        "github.com",
-        "objects.githubusercontent.com",
-        "raw.githubusercontent.com",
-        "pypi.org",
-        "files.pythonhosted.org",
-        "crates.io",
-        "static.crates.io",
-        "proxy.golang.org",
-        "code.claude.com",
-        "docs.claude.com"
-      ]
-    },
-    "credentials": {
-      "files": [
-        {
-          "path": "~/.ssh",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.gnupg",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.password-store",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.aws/credentials",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.config/gcloud",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.kube/config",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.docker/config.json",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.npmrc",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.netrc",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.claude/.credentials.json",
-          "mode": "deny"
-        },
-        {
-          "path": "~/.claude.json",
-          "mode": "deny"
-        }
-      ],
-      "envVars": [
-        {
-          "name": "ANTHROPIC_API_KEY",
-          "mode": "deny"
-        },
-        {
-          "name": "OPENAI_API_KEY",
-          "mode": "deny"
-        },
-        {
-          "name": "GITHUB_TOKEN",
-          "mode": "deny"
-        },
-        {
-          "name": "GH_TOKEN",
-          "mode": "deny"
-        },
-        {
-          "name": "GITLAB_TOKEN",
-          "mode": "deny"
-        },
-        {
-          "name": "NPM_TOKEN",
-          "mode": "deny"
-        },
-        {
-          "name": "AWS_ACCESS_KEY_ID",
-          "mode": "deny"
-        },
-        {
-          "name": "AWS_SECRET_ACCESS_KEY",
-          "mode": "deny"
-        },
-        {
-          "name": "AWS_SESSION_TOKEN",
-          "mode": "deny"
-        }
-      ]
-    }
-  },
   "voiceEnabled": false
 }
