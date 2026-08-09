@@ -30,6 +30,35 @@ hl.config({
       color = "rgba(0000004d)",
       color_inactive = "rgba(00000026)",
     },
+
+    -- Le blur ne floute pas la fenêtre : il floute ce qui se trouve derrière,
+    -- à travers la part de translucidité. Les opacités Omarchy restent
+    -- inchangées (0.97 actif / 0.9 inactif), donc l'effet se lit surtout sur
+    -- les fenêtres inactives et les popups — un rappel de profondeur, pas un
+    -- verre dépoli.
+    blur = {
+      enabled = true,
+
+      -- size 6 / passes 2 : un rayon modeste, mais assez de passes pour que
+      -- le flou reste lisse. L'inverse (size élevé, 1 passe) donne un flou
+      -- sale, en escalier.
+      size = 6,
+      passes = 2,
+
+      -- Indispensable côté GPU, et prérequis de xray.
+      new_optimizations = true,
+
+      -- Les fenêtres flottantes floutent le fond d'écran plutôt que les
+      -- fenêtres tuilées en dessous : moins de travail par frame, et un
+      -- résultat plus calme quand une popup passe au-dessus d'un terminal.
+      xray = true,
+
+      -- Menus contextuels et tooltips flous eux aussi, par cohérence.
+      -- popups_ignorealpha laisse nettes les zones trop transparentes pour
+      -- que le flou y ait un sens (ombres de popup, coins arrondis).
+      popups = true,
+      popups_ignorealpha = 0.2,
+    },
   },
 })
 
