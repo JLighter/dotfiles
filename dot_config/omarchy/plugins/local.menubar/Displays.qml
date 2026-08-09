@@ -59,6 +59,12 @@ BarWidget {
   property var displays: []
   property int enabledDisplayCount: 0
 
+  // Ecran qui porte la barre complete — les autres n'affichent que leurs
+  // workspaces. La valeur vient de la barre, qui l'a deja resolue contre les
+  // ecrans reellement branches : ce qui est marque ici est donc ce qui est
+  // affiche, pas ce qui est enregistre.
+  readonly property string primaryScreen: bar && bar.primaryScreen !== undefined ? String(bar.primaryScreen) : ""
+
   // Les seuls facteurs qu'`omarchy-hyprland-monitor-scaling` accepte : lui en
   // passer un autre le fait sortir en erreur sans rien changer.
   readonly property var scaleValues: ["1", "1.25", "1.6", "2", "3", "4"]
@@ -215,6 +221,16 @@ BarWidget {
     if (!actionProc.running) actionProc.running = true
   }
 
+  // Promouvoir un ecran eteint laisserait la barre complete sur une surface
+  // invisible : le geste n'est offert que sur les ecrans allumes, et la barre
+  // fait de toute facon retomber le role sur le premier ecran si celui qui est
+  // nomme disparait.
+  function setPrimary(name) {
+    if (!name || !bar || typeof bar.setPrimaryScreen !== "function") return
+
+    bar.setPrimaryScreen(String(name))
+  }
+
   // Le facteur s'applique a l'ecran qui a le focus, pas a tous.
   function setScale(scale) {
     actionProc.command = ["omarchy-hyprland-monitor-scaling", String(scale)]
@@ -236,6 +252,8 @@ BarWidget {
   readonly property string glyphDisplay: "󰍹"
   readonly property string glyphDisplays: "󰍺"
   readonly property string glyphEnabled: "󰄬"
+  readonly property string glyphPrimary: "󰓎"
+  readonly property string glyphNotPrimary: "󰓒"
 
   readonly property string currentGlyph: displays.length > 1 ? glyphDisplays : glyphDisplay
 
@@ -289,6 +307,7 @@ BarWidget {
     cursor = 0
     cursorActive = false
     scaleCursor = currentScaleIndex()
+    displayColumn = 0
   }
 
   // --- Curseur clavier -------------------------------------------------------
@@ -300,6 +319,11 @@ BarWidget {
   property int cursor: 0
   property int scaleCursor: 0
   property bool cursorActive: false
+  // Colonne active a l'interieur d'une ligne d'ecran : 0 = allumage, 1 = ecran
+  // principal. Meme mecanique que `scaleCursor` sur la ligne d'echelle, les
+  // fleches horizontales font la navette entre les deux.
+  readonly property int displayColumnCount: 2
+  property int displayColumn: 0
 
   readonly property var rows: {
     var list = []
@@ -334,6 +358,8 @@ BarWidget {
     if (cursor < 0) cursor = 0
     if (scaleCursor >= scaleValues.length) scaleCursor = scaleValues.length - 1
     if (scaleCursor < 0) scaleCursor = 0
+    if (displayColumn >= displayColumnCount) displayColumn = displayColumnCount - 1
+    if (displayColumn < 0) displayColumn = 0
   }
 
   function moveCursor(delta) {
@@ -341,7 +367,8 @@ BarWidget {
   }
 
   // Fleches horizontales : elles agissent a l'interieur de la ligne courante —
-  // la luminosite sur son slider, la pastille voisine sur la ligne d'echelle.
+  // la luminosite sur son slider, la pastille voisine sur la ligne d'echelle,
+  // l'allumage ou l'etoile sur une ligne d'ecran.
   function adjustCursorH(delta) {
     var row = rowAt(cursor)
     if (!row) return
@@ -349,6 +376,8 @@ BarWidget {
     if (row.kind === "brightness") setBrightness(brightnessPercent + delta * 5)
     else if (row.kind === "scale")
       scaleCursor = Math.max(0, Math.min(scaleValues.length - 1, scaleCursor + delta))
+    else if (row.kind === "display")
+      displayColumn = Math.max(0, Math.min(displayColumnCount - 1, displayColumn + delta))
   }
 
   function activateCursor() {
@@ -358,17 +387,26 @@ BarWidget {
     if (row.kind === "scale") setScale(scaleValues[scaleCursor])
     else if (row.kind === "display") {
       var display = displays[row.index]
-      if (display) toggleDisplay(display.name, display.enabled)
+      if (!display) return
+
+      if (displayColumn === 1) {
+        if (display.enabled) setPrimary(display.name)
+      } else {
+        toggleDisplay(display.name, display.enabled)
+      }
     }
     // Luminosite : la valeur du slider est deja l'action, il n'y a rien a valider.
   }
 
-  function pointCursorAt(kind, index) {
+  // `column` est optionnel : seules les lignes d'ecran en ont une, les autres
+  // appellent avec deux arguments et laissent la colonne ou elle etait.
+  function pointCursorAt(kind, index, column) {
     var position = rowIndexOf(kind, index)
     if (position < 0) return
 
     cursorActive = true
     cursor = position
+    if (column !== undefined) displayColumn = column
   }
 
   // --- Bouton de barre -------------------------------------------------------
@@ -762,72 +800,164 @@ BarWidget {
     }
   }
 
-  // Ligne d'ecran : glyphe, nom, coche sur ceux qui sont allumes.
+  // Ligne d'ecran : glyphe, nom, coche sur ceux qui sont allumes, etoile pour
+  // designer celui qui porte la barre complete. Deux gestes distincts sur une
+  // meme ligne, donc deux zones : le corps allume ou eteint, l'etoile promeut.
   component DisplayRow: CursorSurface {
     id: displayRow
 
     required property var display
     required property int rowIndex
 
+    readonly property string displayName: display ? String(display.name || "") : ""
     readonly property bool isFocused: !!display && display.focused === true
     readonly property bool isEnabled: !!display && display.enabled === true
-    // Le dernier ecran allume n'est pas extinguible : la ligne s'estompe pour le
+    readonly property bool isPrimary: displayName !== "" && displayName === root.primaryScreen
+    // Le dernier ecran allume n'est pas extinguible : la zone s'estompe pour le
     // dire avant le clic.
     readonly property bool canToggle: !isEnabled || root.enabledDisplayCount > 1
+    // Rien a promouvoir sur un ecran deja principal, ni sur un ecran eteint —
+    // la barre complete y serait invisible.
+    readonly property bool canPromote: isEnabled && !isPrimary
+
+    readonly property int rowCursor: root.rowIndexOf("display", rowIndex)
 
     height: Style.space(30)
     current: displayRow.isFocused
-    hasCursor: root.cursorActive && root.cursor === root.rowIndexOf("display", rowIndex)
+    hasCursor: root.cursorActive && root.cursor === displayRow.rowCursor && root.displayColumn === 0
     foreground: root.foregroundColor
     accent: root.accentColor
-    opacity: displayRow.canToggle ? 1 : 0.45
 
-    HoverHandler {
-      onHoveredChanged: if (hovered) root.pointCursorAt("display", displayRow.rowIndex)
+    // Zone d'allumage : tout sauf l'etoile.
+    Item {
+      id: toggleZone
+
+      anchors.left: parent.left
+      anchors.right: primaryZone.left
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      opacity: displayRow.canToggle ? 1 : 0.45
+
+      HoverHandler {
+        onHoveredChanged: if (hovered) root.pointCursorAt("display", displayRow.rowIndex, 0)
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: displayRow.canToggle ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: if (displayRow.canToggle) root.toggleDisplay(displayRow.displayName, displayRow.isEnabled)
+      }
+
+      Row {
+        anchors.fill: parent
+        anchors.leftMargin: Style.space(8)
+        anchors.rightMargin: Style.space(4)
+        spacing: Style.space(8)
+
+        // L'ecran qui a le focus porte l'accent : glyphe et libelle.
+        Text {
+          text: root.glyphDisplay
+          color: displayRow.isFocused ? root.accentColor : root.foregroundColor
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.icon
+          width: Style.space(20)
+          horizontalAlignment: Text.AlignHCenter
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+          text: displayRow.displayName + (displayRow.isFocused ? " · focused" : "")
+          color: displayRow.isFocused ? root.accentColor : root.foregroundColor
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          font.bold: displayRow.isFocused
+          elide: Text.ElideRight
+          width: parent.width - Style.space(50)
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+          text: displayRow.isEnabled ? root.glyphEnabled : ""
+          color: root.accentColor
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.icon
+          width: Style.space(14)
+          horizontalAlignment: Text.AlignRight
+          anchors.verticalCenter: parent.verticalCenter
+        }
+      }
     }
 
-    MouseArea {
-      anchors.fill: parent
-      cursorShape: displayRow.canToggle ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onClicked: if (displayRow.canToggle) root.toggleDisplay(displayRow.display.name, displayRow.isEnabled)
-    }
+    // Zone d'ecran principal. Sa propre `CursorSurface` : l'etoile se surligne
+    // seule quand le curseur est sur cette colonne, et garde une pastille
+    // permanente sur l'ecran qui tient le role.
+    CursorSurface {
+      id: primaryZone
 
-    Row {
-      anchors.fill: parent
-      anchors.leftMargin: Style.space(8)
-      anchors.rightMargin: Style.space(8)
-      spacing: Style.space(8)
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(4)
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(26)
+      height: Style.space(24)
+      current: displayRow.isPrimary
+      hasCursor: root.cursorActive && root.cursor === displayRow.rowCursor && root.displayColumn === 1
+      foreground: root.foregroundColor
+      accent: root.accentColor
+      opacity: displayRow.canPromote || displayRow.isPrimary ? 1 : 0.45
 
-      // L'ecran qui a le focus porte l'accent : glyphe et libelle.
-      Text {
-        text: root.glyphDisplay
-        color: displayRow.isFocused ? root.accentColor : root.foregroundColor
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.icon
-        width: Style.space(20)
-        horizontalAlignment: Text.AlignHCenter
-        anchors.verticalCenter: parent.verticalCenter
+      HoverHandler {
+        id: primaryHover
+
+        onHoveredChanged: if (hovered) root.pointCursorAt("display", displayRow.rowIndex, 1)
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: displayRow.canPromote ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: if (displayRow.canPromote) root.setPrimary(displayRow.displayName)
       }
 
       Text {
-        text: String(displayRow.display.name || "") + (displayRow.isFocused ? " · focused" : "")
-        color: displayRow.isFocused ? root.accentColor : root.foregroundColor
+        anchors.centerIn: parent
+        text: displayRow.isPrimary ? root.glyphPrimary : root.glyphNotPrimary
+        color: displayRow.isPrimary ? root.accentColor : root.foregroundColor
         font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-        font.bold: displayRow.isFocused
-        elide: Text.ElideRight
-        width: parent.width - Style.space(50)
-        anchors.verticalCenter: parent.verticalCenter
+        font.pixelSize: Style.font.icon
+      }
+    }
+
+    // Bulle d'aide de l'etoile : le geste change ce que montrent les AUTRES
+    // ecrans, ce qu'aucun etat visible sur cette ligne ne dit. Elle se pose dans
+    // la ligne, a gauche de l'etoile — le ScrollView clippe son contenu, une
+    // bulle debordant de la liste serait rognee.
+    BorderSurface {
+      anchors.right: primaryZone.left
+      anchors.rightMargin: Style.space(4)
+      anchors.verticalCenter: parent.verticalCenter
+      implicitWidth: primaryHintLabel.implicitWidth + Style.space(16)
+      implicitHeight: primaryHintLabel.implicitHeight + Style.space(8)
+      radius: Style.cornerRadius
+      color: Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      opacity: primaryHover.hovered ? 1 : 0
+      visible: opacity > 0
+
+      Behavior on opacity {
+        NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
       }
 
       Text {
-        text: displayRow.isEnabled ? root.glyphEnabled : ""
-        color: root.accentColor
+        id: primaryHintLabel
+
+        anchors.centerIn: parent
+        text: {
+          if (displayRow.isPrimary) return "Carries the full menubar"
+          if (!displayRow.isEnabled) return "Turn this screen on first"
+          return "Move the full menubar here"
+        }
+        color: Color.tooltip.text
         font.family: root.fontFamily
-        font.pixelSize: Style.font.icon
-        width: Style.space(14)
-        horizontalAlignment: Text.AlignRight
-        anchors.verticalCenter: parent.verticalCenter
+        font.pixelSize: Style.font.caption
       }
     }
   }
