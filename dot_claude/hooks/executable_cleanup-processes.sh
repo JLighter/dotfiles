@@ -5,7 +5,7 @@
 # 2. Removes old Claude Code binary versions, keeping only the current one.
 #
 # Safe for parallel sessions: only targets process trees whose root
-# daemon has PPID=1 (adopted by launchd = orphaned). Active sessions'
+# daemon has PPID=1 (reparented to init = orphaned). Active sessions'
 # workers have a real parent and are never touched.
 #
 # Usage:
@@ -16,7 +16,14 @@ set -euo pipefail
 
 LOG_DIR="$HOME/.claude/logs"
 LOG_FILE="$LOG_DIR/cleanup.log"
-mkdir -p "$LOG_DIR"
+
+# Claude Code's bash sandbox mounts ~/.claude/logs read-only, and set -e turned
+# the first log() into a hard abort — the cleanup never ran. Probe once, then
+# degrade to a silent run. 2>/dev/null must precede the append: bash applies
+# redirections left to right and reports a failure on the stderr in effect.
+if ! mkdir -p "$LOG_DIR" 2>/dev/null || ! : 2>/dev/null >> "$LOG_FILE"; then
+  LOG_FILE=""
+fi
 
 STARTUP_MODE=false
 [[ "${1:-}" == "--startup" ]] && STARTUP_MODE=true
@@ -24,9 +31,10 @@ STARTUP_MODE=false
 MY_PID=$$
 
 log() {
+  [[ -n "$LOG_FILE" ]] || return 0
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-  echo "[$timestamp] $*" >> "$LOG_FILE"
+  echo "[$timestamp] $*" 2>/dev/null >> "$LOG_FILE" || true
 }
 
 # Get all ancestor PIDs of current process
@@ -163,7 +171,9 @@ if [[ -d "$VERSIONS_DIR" ]]; then
       [[ -e "$version_file" ]] || continue
       version_name=$(basename "$version_file")
       if [[ "$version_name" != "$CURRENT_VERSION" ]]; then
-        file_size=$(stat -f%z "$version_file" 2>/dev/null || echo 0)
+        # GNU stat first (Linux), BSD second (macOS). The BSD-only form this
+        # carried always fell through to 0 on Arch, logging removals as 0MB.
+        file_size=$(stat -c%s "$version_file" 2>/dev/null || stat -f%z "$version_file" 2>/dev/null || echo 0)
         FREED_BYTES=$((FREED_BYTES + file_size))
         rm -f "$version_file"
         log "REMOVED old version $version_name ($(( file_size / 1048576 ))MB)"
