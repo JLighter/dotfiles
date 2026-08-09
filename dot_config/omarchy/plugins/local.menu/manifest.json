@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "local.menu",
+  "name": "Menu",
+  "version": "1.0.0",
+  "author": "jlighter",
+  "license": "MIT",
+  "description": "Menu Omarchy habille comme la menubar : ilots, halo d'accent, sans lisere",
+  "kinds": ["menu"],
+  "keepLoaded": true,
+  "entryPoints": { "menu": "Menu.qml" }
+}
