@@ -6,17 +6,13 @@ import qs.Commons
 import qs.Ui
 
 // Widget d'usage Claude : quota le plus contraignant dans la barre, detail
-// complet au clic. Reimplementation de `omarchy.model-usage` cote Claude.
+// complet au clic. Vue Claude seule de ce que montre `omarchy.agents`.
 //
-// Deux sources, independantes l'une de l'autre :
-//   - les quotas viennent de l'endpoint OAuth d'Anthropic, interroge avec le
-//     jeton de ~/.claude/.credentials.json ;
-//   - les compteurs locaux (prompts, sessions, tokens) viennent du scanner
-//     Python embarque, qui parcourt ~/.claude/projects.
-//
-// Le jeton ne sort jamais d'ici : il part uniquement dans l'en-tete
-// Authorization vers api.anthropic.com, n'est jamais passe en argument de
-// commande (ce serait lisible dans `ps`) ni journalise.
+// Une seule source : l'enregistrement que le collecteur d'Omarchy depose dans
+// ~/.local/state/omarchy/agents/usage/claude.json. Quotas et compteurs locaux y
+// arrivent ensemble — ce widget interrogeait auparavant l'endpoint OAuth
+// d'Anthropic lui-meme et embarquait son propre scanner de transcrits ; la 4.0
+// fait les deux, mieux, et personne n'a plus a manipuler de jeton ici.
 BarWidget {
   id: root
   moduleName: "local.menubar.claude-usage"
@@ -53,54 +49,83 @@ BarWidget {
     return Item.Top
   }
 
-  // --- Identifiants ----------------------------------------------------------
+  // --- Enregistrement d'usage ------------------------------------------------
+  // Omarchy collecte lui-meme l'usage des agents depuis la 4.0 :
+  // `omarchy-agent-usage-update` lance un collecteur par agent et depose un
+  // enregistrement JSON par agent dans ~/.local/state/omarchy/agents/usage/. Le
+  // collecteur `claude` fait les deux choses que ce widget faisait a la main —
+  // interroger l'endpoint OAuth d'Anthropic pour les quotas, parcourir
+  // ~/.claude/projects pour les compteurs — et couvre en plus les sessions
+  // opencode et un cache de repli quand les transcrits manquent.
+  //
+  // Ce widget ne detient donc plus de jeton, n'ouvre plus de socket et n'embarque
+  // plus de scanner : il lit un fichier et demande sa regeneration.
 
-  property string accessToken: ""
-  property real tokenExpiresAtMs: 0
-  property string subscriptionType: ""
-  property string statusText: ""
+  property var record: ({})
 
-  readonly property bool tokenExpired: tokenExpiresAtMs > 0 && Date.now() >= tokenExpiresAtMs
-  readonly property bool authenticated: accessToken !== "" && !tokenExpired
+  readonly property string usagePath:
+    (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state")
+    + "/omarchy/agents/usage/claude.json"
 
-  function parseCredentials(content) {
+  function parseRecord(content) {
     try {
-      var oauth = (JSON.parse(content || "{}").claudeAiOauth) || {}
-      accessToken = String(oauth.accessToken || "")
-      subscriptionType = String(oauth.subscriptionType || "")
-
-      // `expiresAt` est en millisecondes chez Claude Code, mais on tolere des
-      // secondes pour ne pas croire le jeton perime a tort.
-      var expires = Number(oauth.expiresAt || 0)
-      tokenExpiresAtMs = expires > 0 && expires < 10000000000 ? expires * 1000 : expires
-
-      statusText = accessToken === "" ? "Not signed in" : ""
-      if (authenticated) probeUsage(true)
+      var parsed = JSON.parse(String(content || ""))
+      root.record = parsed && typeof parsed === "object" ? parsed : ({})
     } catch (e) {
-      statusText = "Unreadable credentials"
+      root.record = ({})
     }
   }
 
   FileView {
-    path: Quickshell.env("HOME") + "/.claude/.credentials.json"
+    path: root.usagePath
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
-    onLoaded: root.parseCredentials(text())
-    onLoadFailed: root.statusText = "Not signed in"
+    onLoaded: root.parseRecord(text())
+    onLoadFailed: root.record = ({})
   }
 
-  // --- Quotas ----------------------------------------------------------------
-  // La reponse expose un tableau `limits` : une entree par quota, avec son
-  // pourcentage, sa date de remise a zero et sa portee. On l'affiche tel quel
-  // plutot que de coder en dur session/semaine, pour qu'un futur quota
-  // apparaisse tout seul.
+  // Le collecteur separe ce qu'il n'a pas pu joindre (`usageStatusText`) de ce
+  // qu'il faut faire pour y remedier (`authHelpText`).
+  readonly property string statusText: String(record.usageStatusText || "")
+  readonly property string authHelpText: String(record.authHelpText || "")
+  readonly property string subscriptionType: String(record.tierLabel || "")
 
-  property var limits: []
-  property var extraUsage: null
-  property real lastProbeAtMs: 0
-  property bool probing: false
-  readonly property int probeMinIntervalMs: 60000
+  // « Authentifie » n'a plus de sens ici, le widget ne detient plus de jeton :
+  // ce qui compte est qu'un enregistrement exploitable soit arrive.
+  readonly property bool authenticated: record.ready === true && statusText === ""
+
+  // --- Quotas ----------------------------------------------------------------
+  // L'enregistrement normalise chaque quota en {label, percent, resetsAt, title}
+  // — une entree par fenetre, quelle qu'elle soit, pour qu'un futur quota
+  // apparaisse tout seul. Le pourcentage y est une fraction de 0 a 1, la ou
+  // l'endpoint d'Anthropic parlait en centiemes : on le ramene une fois pour
+  // toutes a l'echelle d'affichage, et le reste du fichier ne voit pas la
+  // difference.
+
+  readonly property var limits: {
+    var source = Array.isArray(record.limits) ? record.limits : []
+    var out = []
+    for (var i = 0; i < source.length; i++) {
+      var entry = source[i]
+      if (!entry) continue
+
+      // Un quota que le collecteur n'a pas pu mesurer arrive en negatif : il
+      // n'a rien a dire, et le laisser passer le ferait gagner le classement du
+      // quota le plus consomme a l'envers.
+      var percent = Number(entry.percent)
+      if (!isFinite(percent) || percent < 0) continue
+
+      out.push({
+        label: String(entry.title || entry.label || ""),
+        percent: percent * 100,
+        resetsAt: String(entry.resetsAt || "")
+      })
+    }
+    return out
+  }
+
+  readonly property bool probing: collector.running
 
   // Le quota qui compte : le plus consomme de tous.
   readonly property var leadingLimit: {
@@ -115,17 +140,10 @@ BarWidget {
 
   readonly property int leadingPercent: leadingLimit ? Math.round(Number(leadingLimit.percent || 0)) : -1
 
+  // Le collecteur nomme deja ses fenetres (« Session (5-hour) », « Weekly
+  // (7-day) », « Fable Weekly ») : il n'y a plus de code de type a traduire.
   function limitLabel(entry) {
-    if (!entry) return ""
-
-    var scopeName = entry.scope && entry.scope.model ? String(entry.scope.model.display_name || "") : ""
-    var kind = String(entry.kind || "")
-
-    if (kind === "session") return "Session · 5 h"
-    if (kind === "weekly_all") return "Weekly · all models"
-    if (kind === "weekly_scoped") return scopeName ? "Weekly · " + scopeName : "Weekly · scoped"
-    // Repli lisible pour un type de quota encore inconnu.
-    return kind.replace(/_/g, " ") + (scopeName ? " · " + scopeName : "")
+    return entry ? String(entry.label || "") : ""
   }
 
   // « dans 2 h 15 » plutot qu'une date : c'est le delai qui interesse.
@@ -147,16 +165,32 @@ BarWidget {
     return minutes + " min"
   }
 
+  // Sur combien de temps porte un quota. L'enregistrement ne le dit pas : il
+  // nomme ses fenetres sans les mesurer. Le nom porte pourtant la duree —
+  // « Session (5-hour) », « Weekly (7-day) » — et une fenetre dont le nom n'en
+  // dit rien (« Fable Weekly ») est hebdomadaire chez Anthropic.
+  function windowFor(entry) {
+    var label = String((entry && entry.label) || "")
+    var match = label.match(/(\d+)\s*-?\s*(hour|day)/i)
+
+    if (match) {
+      var count = Number(match[1])
+      var unit = match[2].toLowerCase() === "hour" ? 3600 * 1000 : 24 * 3600 * 1000
+      if (count > 0) return count * unit
+    }
+
+    return 7 * 24 * 3600 * 1000
+  }
+
   // Compare la consommation au temps ecoule dans la fenetre : au-dessus de la
   // diagonale on consomme trop vite pour tenir jusqu'a la remise a zero.
   function paceFor(entry) {
-    if (!entry || !entry.resets_at) return ""
+    if (!entry || !entry.resetsAt) return ""
 
-    var reset = new Date(entry.resets_at).getTime()
+    var reset = new Date(entry.resetsAt).getTime()
     if (!isFinite(reset)) return ""
 
-    var kind = String(entry.kind || "")
-    var period = kind === "session" ? 5 * 3600 * 1000 : 7 * 24 * 3600 * 1000
+    var period = windowFor(entry)
     var remaining = reset - Date.now()
     if (remaining <= 0 || remaining > period) return ""
 
@@ -176,52 +210,17 @@ BarWidget {
     return Math.round(diff * 100) + "% ahead"
   }
 
-  function probeUsage(force) {
-    if (!authenticated || probing) return
-
-    var now = Date.now()
-    if (force !== true && lastProbeAtMs > 0 && (now - lastProbeAtMs) < probeMinIntervalMs) return
-    lastProbeAtMs = now
-    probing = true
-
-    var request = new XMLHttpRequest()
-    request.open("GET", "https://api.anthropic.com/api/oauth/usage")
-    request.setRequestHeader("Authorization", "Bearer " + accessToken)
-    request.setRequestHeader("anthropic-beta", "oauth-2025-04-20")
-    request.setRequestHeader("Accept", "application/json")
-    request.onreadystatechange = function() {
-      if (request.readyState !== XMLHttpRequest.DONE) return
-
-      root.probing = false
-      if (request.status < 200 || request.status >= 300) {
-        // 429 = l'endpoint limite les sondes ; les compteurs locaux restent bons.
-        root.statusText = request.status === 429 ? "Limits rate-limited" : "Limits unavailable"
-        return
-      }
-
-      try {
-        var payload = JSON.parse(request.responseText || "{}")
-        root.limits = Array.isArray(payload.limits) ? payload.limits : []
-        root.extraUsage = payload.extra_usage || null
-        root.statusText = ""
-      } catch (e) {
-        root.statusText = "Unreadable limits"
-      }
-    }
-    request.send()
-  }
-
   // --- Compteurs locaux ------------------------------------------------------
+  // Memes noms que dans l'enregistrement : le collecteur publie exactement le
+  // contrat que produisait le scanner, il n'y a rien a traduire.
 
-  property var stats: ({})
-
-  readonly property int todayPrompts: Number(stats.todayPrompts || 0)
-  readonly property int todaySessions: Number(stats.todaySessions || 0)
-  readonly property real todayTokens: Number(stats.todayTotalTokens || 0)
-  readonly property int totalPrompts: Number(stats.totalPrompts || 0)
-  readonly property int totalSessions: Number(stats.totalSessions || 0)
-  readonly property var modelUsage: stats.modelUsage || ({})
-  readonly property var recentDays: Array.isArray(stats.recentDays) ? stats.recentDays : []
+  readonly property int todayPrompts: Number(record.todayPrompts || 0)
+  readonly property int todaySessions: Number(record.todaySessions || 0)
+  readonly property real todayTokens: Number(record.todayTotalTokens || 0)
+  readonly property int totalPrompts: Number(record.totalPrompts || 0)
+  readonly property int totalSessions: Number(record.totalSessions || 0)
+  readonly property var modelUsage: record.modelUsage || ({})
+  readonly property var recentDays: Array.isArray(record.recentDays) ? record.recentDays : []
 
   readonly property var modelNames: {
     var names = []
@@ -238,39 +237,54 @@ BarWidget {
     return String(Math.round(n))
   }
 
+  // --- Regeneration ----------------------------------------------------------
+  // C'est `omarchy.agents` qui porte d'ordinaire ce rafraichissement ; ce widget
+  // le remplace dans cette barre, la relance lui revient donc. On se limite a
+  // l'agent claude — les autres enregistrements ne nous regardent pas, et le
+  // widget natif garde son propre timer si un jour il reprend sa place.
+  //
+  // Le fichier est surveille, pas relu : c'est le FileView qui ramene le
+  // resultat, ce processus ne fait que le provoquer.
   Process {
-    id: scanner
+    id: collector
 
-    // Le scanner vit a cote de ce fichier ; on resout son chemin depuis l'URL
-    // du composant plutot que de coder en dur l'emplacement du plugin.
-    readonly property string scriptPath: String(Qt.resolvedUrl("claude_usage_scanner.py")).replace(/^file:\/\//, "")
-
-    command: ["python3", scriptPath, Quickshell.env("HOME") + "/.claude/projects"]
-    stdout: StdioCollector {
+    stderr: StdioCollector {
       waitForEnd: true
-      onStreamFinished: {
-        try {
-          root.stats = JSON.parse(text || "{}")
-        } catch (e) {
-          root.stats = ({})
-        }
-      }
+      onStreamFinished: if (text.trim() !== "") console.warn("claude-usage", text.trim())
     }
   }
 
-  function refresh(force) {
-    if (!scanner.running) scanner.running = true
-    probeUsage(force === true)
+  function runCollector(flag) {
+    // Une relance pendant qu'une autre tourne n'apporterait rien : le collecteur
+    // ecrit le meme fichier, et la suivante viendra de toute facon au timer.
+    if (collector.running) return
+
+    var command = ["omarchy-agent-usage-update"]
+    if (flag) command.push(flag)
+    command.push("claude")
+    collector.command = command
+    collector.running = true
   }
 
-  // Sondage espace : l'icone n'a besoin que d'un ordre de grandeur, et
-  // l'endpoint d'Anthropic n'aime pas etre interroge en boucle.
+  function refresh(force) {
+    runCollector(force === true ? "--force" : "")
+  }
+
+  // Ce que veut une ouverture de panneau : les chiffres qui vieillissent sur le
+  // reseau, pas une nouvelle marche sur tous les transcrits du disque.
+  function refreshLimits() {
+    runCollector("--limits-only")
+  }
+
+  // Sondage espace : le collecteur parcourt les transcrits et interroge un
+  // endpoint distant, alors que l'icone n'a besoin que d'un ordre de grandeur.
+  // Panneau ouvert, on se rabat sur les seuls quotas, bien moins couteux.
   Timer {
     interval: root.opened ? 60000 : 900000
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.refresh(false)
+    onTriggered: root.opened ? root.refreshLimits() : root.refresh(false)
   }
 
   // --- Ouverture -------------------------------------------------------------
@@ -279,7 +293,7 @@ BarWidget {
 
   function open() {
     opened = true
-    refresh(true)
+    refreshLimits()
   }
 
   function close() {
@@ -565,26 +579,9 @@ BarWidget {
             }
           }
 
-          // ---- Credits supplementaires ----
-          PanelIsland {
-            visible: root.extraUsage && root.extraUsage.is_enabled === true
-
-            SectionHeader { text: "EXTRA USAGE" }
-
-            DetailRow {
-              label: "Used"
-              value: root.extraUsage
-                ? Number(root.extraUsage.used_credits || 0).toFixed(2) + " " + String(root.extraUsage.currency || "")
-                : ""
-            }
-
-            DetailRow {
-              label: "Monthly limit"
-              value: root.extraUsage
-                ? Number(root.extraUsage.monthly_limit || 0).toFixed(2) + " " + String(root.extraUsage.currency || "")
-                : ""
-            }
-          }
+          // Le bloc « extra usage » a disparu avec l'appel direct a l'endpoint :
+          // le collecteur ne reporte pas les credits hors forfait. Seuls les
+          // agents prepayes ont un solde chez Omarchy, et Claude n'en est pas un.
 
           // ---- Activite du jour ----
           PanelIsland {
@@ -873,7 +870,7 @@ BarWidget {
 
     Text {
       text: {
-        var reset = root.formatReset(limitRow.entry.resets_at)
+        var reset = root.formatReset(limitRow.entry.resetsAt)
         var parts = []
         if (reset) parts.push("resets in " + reset)
         if (limitRow.pace) parts.push(limitRow.pace)
