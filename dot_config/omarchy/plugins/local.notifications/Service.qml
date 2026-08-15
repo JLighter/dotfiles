@@ -15,18 +15,28 @@
 //
 // Ce qui reste a la charge du natif, et qu'on ne touche pas :
 //   - le filtrage DND, applique dans `handleNotification()` avant l'insertion ;
-//   - l'historique, `addToPending()` s'executant lui aussi en amont de
-//     `popupModel`, independamment de lui.
+//   - la persistance du fichier de popup, ecrite a l'insertion.
 // Ce qu'on doit reproduire a la main, parce que `removePopup()` le faisait :
-//   - `ref.dismiss()` / `ref.expire()` sur la reference conservee ;
-//   - `markSeenByOriginalId()` pour faire passer l'entree de pending a past.
+//   - `ref.dismiss()` / `ref.expire()`, sur la reference que `refFor()` resout ;
+//   - `archivePopupFileFor()`, qui fait passer le fichier du toast dans
+//     l'historique — c'est lui, et lui seul, qui donne a `showRecentHistory()`
+//     quelque chose a rejouer.
+//
+// ── Ce que la 4.0 a change ──────────────────────────────────────────────────
+// L'annonce de fragilite ci-dessous s'est realisee : la mise a jour a refondu
+// le centre de notifications en « toasts vivants + historique sur disque ».
+//   - `pendingModel` / `pastModel` / `markSeenByOriginalId` ont disparu, avec la
+//     notion meme de pending ; l'archivage sur disque les remplace ;
+//   - la reference vivante a quitte la ligne du modele pour le dictionnaire
+//     `liveRefs`, indexe par `originalId` — d'ou `refFor()`.
 //
 // ── Fragilite assumee ───────────────────────────────────────────────────────
 // On s'accroche au contrat interne du service natif : `popupModel` et la forme
-// de ses lignes, `markSeenByOriginalId`, `durationFor`, `focusApp`. Un
-// `omarchy update` qui renomme l'un d'eux casse les toasts. Le mode d'echec est
-// cependant benin : si CE plugin ne charge pas, le natif garde son modele plein
-// et affiche ses propres toasts, sans style mais sans perte.
+// de ses lignes, `liveRefs`, `isRestoredRow`, `archivePopupFileFor`,
+// `durationFor`, `focusApp`. Un `omarchy update` qui renomme l'un d'eux casse
+// les toasts. Le mode d'echec est cependant benin : si CE plugin ne charge pas,
+// le natif garde son modele plein et affiche ses propres toasts, sans style
+// mais sans perte.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import QtQuick
@@ -132,6 +142,11 @@ Item {
 
       // Copier AVANT de retirer : `get()` rend une reference dans le modele, que
       // `remove()` invalide aussitot.
+      //
+      // Pas de `ref` recopiee ici : la reference vivante a quitte la ligne du
+      // modele natif, `refFor()` la resout au moment de s'en servir. On retient
+      // en revanche si la ligne etait restauree — le savoir plus tard suppose
+      // que le service natif la connaisse encore, or on la lui retire.
       var copy = {
         originalId: row.originalId,
         app: row.app || "",
@@ -143,12 +158,36 @@ Item {
         urgency: row.urgency,
         expireTimeout: row.expireTimeout || 0,
         timestamp: row.timestamp,
-        ref: row.ref
+        restored: service.isRestored(row)
       }
 
       source.remove(index)
       toastModel.insert(0, copy)
     }
+  }
+
+  // Une ligne restauree n'a plus d'objet serveur derriere elle, et son
+  // identifiant, d'une generation precedente, peut entre-temps appartenir a une
+  // notification sans rapport : la resoudre fermerait celle-la a sa place.
+  function isRestored(row) {
+    return !!row && !!nativeService
+      && typeof nativeService.isRestoredRow === "function"
+      && nativeService.isRestoredRow(row)
+  }
+
+  // La reference vivante ne voyage plus dans la ligne : le service natif la
+  // range dans `liveRefs`, indexee par `originalId`. On la resout a l'usage
+  // plutot que de la recopier dans `toastModel` — un ListModel ne cree pas de
+  // role pour une valeur indefinie, et la premiere notification depourvue de
+  // reference condamnerait le champ pour toutes les suivantes.
+  function refFor(entry) {
+    if (!entry || entry.restored === true) return null
+
+    var originalId = Number(entry.originalId)
+    if (!isFinite(originalId) || originalId < 0) return null
+
+    var refs = nativeService ? nativeService.liveRefs : null
+    return refs ? (refs[originalId] || null) : null
   }
 
   // On suit le compte par liaison de propriete plutot que par un `Connections`
@@ -157,7 +196,11 @@ Item {
   // natif se resout que quand une notification arrive. Une piece mobile en moins.
   readonly property int nativeCount: nativePopupModel ? nativePopupModel.count : 0
 
-  onNativeCountChanged: if (nativeCount > 0) drain()
+  // Draine hors de l'evaluation de la liaison : `drain()` vide le modele que
+  // `nativeCount` observe, donc l'appeler d'ici en direct rouvre le calcul de la
+  // propriete pendant qu'il tourne encore — Qt y voit une boucle de liaison, la
+  // signale a chaque notification et menace de rompre la liaison.
+  onNativeCountChanged: if (nativeCount > 0) Qt.callLater(drain)
 
   // Le service natif est charge avant celui-ci (les first-party sont scannes en
   // premier), mais l'injection de `shell` et la resolution du service se font en
@@ -180,8 +223,20 @@ Item {
     if (index < 0 || index >= toastModel.count) return
 
     var entry = toastModel.get(index)
-    var ref = entry ? entry.ref : null
-    var originalId = entry ? entry.originalId : -1
+    var ref = service.refFor(entry)
+
+    // Ce que `removePopup()` fait pour ses propres lignes : le toast quitte
+    // l'ecran, son fichier devient la derniere entree d'historique. Sans cet
+    // appel rien n'entre jamais dans l'historique — on retire les lignes du
+    // modele natif sans passer par lui — et `showRecentHistory()` n'a plus rien
+    // a rejouer. L'archivage precede le retrait : `get()` rend une reference
+    // dans le modele, que `remove()` invalide aussitot.
+    //
+    // (`markSeenByOriginalId` occupait cette place ; la 4.0 a remplace le couple
+    // pending / past par cet archivage sur disque, et la fonction a disparu.)
+    if (entry && nativeService && typeof nativeService.archivePopupFileFor === "function")
+      nativeService.archivePopupFileFor(entry)
+
     toastModel.remove(index)
 
     if (ref) {
@@ -194,10 +249,6 @@ Item {
         // Objet deja demonte par le serveur — rien a fermer.
       }
     }
-
-    // Ce que `removePopup()` faisait pour nous : l'entree passe de pending a past.
-    if (originalId >= 0 && nativeService && typeof nativeService.markSeenByOriginalId === "function")
-      nativeService.markSeenByOriginalId(originalId)
   }
 
   // Declenche l'action libnotify « default », puis ferme. Les clients
@@ -207,7 +258,7 @@ Item {
     if (index < 0 || index >= toastModel.count) return
 
     var entry = toastModel.get(index)
-    var ref = entry ? entry.ref : null
+    var ref = service.refFor(entry)
     var invoked = false
 
     if (ref && ref.actions) {
