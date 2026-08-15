@@ -112,18 +112,21 @@ Item {
   Behavior on barForeground { ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
 
   // Lance une commande sur le workspace actif, sans attendre son resultat.
+  //
+  // `Util.hyprExecCommand`, qui construisait la ligne a passer a un `Process`,
+  // a disparu en 4.0 au profit de `Util.execDetached`, qui lance la commande
+  // lui-meme sous `bash -lc`. Le `Process` local n'a donc plus lieu d'etre — et
+  // tant que cet appel restait, `run()` levait a chaque geste, ce qui rendait
+  // muets tous les clics qui lancent quelque chose : workspaces en tete.
   function run(command) {
     if (!command) return
 
-    launcher.command = Util.hyprExecCommand(command)
-    launcher.startDetached()
+    Util.execDetached(command)
   }
 
   function shellQuote(value) {
     return Util.shellQuote(value)
   }
-
-  Process { id: launcher }
 
   // --- Coordination des popups -----------------------------------------------
   // Un seul panneau ouvert a la fois : en ouvrir un ferme celui qui l'etait.

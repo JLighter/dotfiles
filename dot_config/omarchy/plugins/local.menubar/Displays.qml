@@ -432,12 +432,20 @@ BarWidget {
     }
   }
 
-  WidgetButton {
+  // A la taille de la barre, le glyphe hinte tombe deux pixels trop a droite
+  // dans son bouton. On corrigeait l'ecart a la main avec `rightExtraMargin`,
+  // que la 4.0 a retire : le shell mesure desormais le glyphe et le recentre
+  // lui-meme, via l'`OpticalGlyph` que porte `BarIconButton`. Plus de constante
+  // a entretenir, et la correction suit la police du theme au lieu de la
+  // supposer. `fontSize` reste celle du reste de la barre — `BarIconButton`
+  // viserait autrement la taille d'icone du shell, d'un point plus grande.
+  BarIconButton {
     id: button
 
     anchors.fill: parent
     bar: root.bar
     text: root.currentGlyph
+    fontSize: Style.font.body
     tooltipText: {
       var count = root.enabledDisplayCount
       var label = count + (count > 1 ? " displays" : " display")
@@ -445,12 +453,6 @@ BarWidget {
     }
     fixedWidth: root.vertical ? root.islandSize : Math.max(Style.space(24), root.islandRadius * 2)
     fixedHeight: root.islandSize
-    // A la taille de la barre, le glyphe hinte tombe deux pixels trop a droite
-    // dans le bouton. `rightExtraMargin` recule le libelle de la moitie de sa
-    // valeur, a l'echelle du theme comme l'ecart qu'il corrige, sans toucher a
-    // la largeur que `fixedWidth` tient deja. Le widget natif retient la meme
-    // valeur pour ce meme glyphe.
-    rightExtraMargin: 4
     onPressed: function(mouseButton) { root.toggle() }
     onWheelMoved: function(delta) {
       root.setBrightness(root.brightnessPercent + (delta > 0 ? 5 : -5))

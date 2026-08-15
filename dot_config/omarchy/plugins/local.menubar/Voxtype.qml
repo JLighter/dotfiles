@@ -368,9 +368,9 @@ BarWidget {
     tooltipText: root.stateLabel
     fixedWidth: root.buttonSize
     fixedHeight: root.islandSize
-    // Pas de `rightExtraMargin` ici : le recul de deux pixels que portent les
-    // widgets voisins corrige le bearing de leur propre glyphe, pas celui du
-    // micro, qui tombe deja centre dans son bouton.
+    // Reste un `WidgetButton` la ou Displays est passe a `BarIconButton` : le
+    // glyphe du micro tombe deja centre dans son bouton, il n'a pas de bearing
+    // a rattraper et rien a gagner au recentrage optique.
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) root.toggleRecording()
       else root.toggle()
