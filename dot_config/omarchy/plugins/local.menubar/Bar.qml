@@ -337,6 +337,15 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               spacing: root.islandGap
 
+              // S'efface entierement quand aucune application ne tient d'icone
+              // en arriere-plan : `Row` ignore les enfants invisibles, jusque
+              // dans son espacement.
+              Island {
+                visible: trayWidget.visible
+
+                Tray { id: trayWidget; bar: root }
+              }
+
               Island {
                 Cliamp { bar: root }
               }
@@ -400,6 +409,12 @@ Item {
               anchors.bottomMargin: root.edgeMargin
               anchors.horizontalCenter: parent.horizontalCenter
               spacing: root.islandGap
+
+              Island {
+                visible: trayWidgetVertical.visible
+
+                Tray { id: trayWidgetVertical; bar: root }
+              }
 
               Island {
                 Cliamp { bar: root }
