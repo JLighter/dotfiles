@@ -110,6 +110,9 @@ export DISPLAY=:0
 # NB : ce fichier était déployé mais jamais sourcé avant la migration chezmoi.
 [ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
 
+# ── Claude Code : raccourcis one-shot (cq, cqr, cqe, cqf, cqc, cqv, cqd) ──
+[ -f "$HOME/.claude_cli.zsh" ] && source "$HOME/.claude_cli.zsh"
+
 # ── Lazy-load CLI completions (deferred until first use) ──
 _lazy_completion() {
     local cmd=$1

@@ -220,6 +220,44 @@ par le dépôt, donc par un diff git relu, jamais par une écriture directe.
 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` retire les credentials Anthropic et cloud de
 l'environnement de tous les sous-processus, sandbox ou pas.
 
+### Raccourcis shell
+
+`dot_claude_cli.zsh` pose `~/.claude_cli.zsh`, sourcé par le `.zshrc` juste
+après `.aliases`. Sept commandes qui répondent, lisent, modifient ou relisent
+sans qu'il y ait de session à ouvrir ni de modèle à choisir :
+
+| Commande | Modèle | Outils | Usage |
+| -------- | ------ | ------ | ----- |
+| `cq` | haiku / low | aucun | question de culture générale, sans contexte projet |
+| `cqr` | sonnet / high | lecture | question sur le code du dossier courant |
+| `cqe` | sonnet / high | lecture + écriture | modification ciblée, éditions appliquées sans confirmation |
+| `cqf` | sonnet / high | lecture + écriture | `<commande qui échoue> 2>&1 \| cqf` — diagnostic puis correctif |
+| `cqc` | sonnet / low | aucun | message de commit à partir de l'index |
+| `cqv` | opus / high | lecture | revue du diff courant, ou face à une base donnée |
+| `cqd` | opus / max | session interactive | gros sujet, ouvert en mode plan |
+
+Trois choix méritent d'être notés. **Le prompt part toujours par stdin**, jamais
+en argument : `--tools`, `--allowedTools` et `--add-dir` sont variadiques, et un
+prompt placé derrière est avalé comme nom d'outil — `claude` répond alors
+« Input must be provided ». Passer par stdin règle aussi le quoting et permet à
+n'importe quelle commande de piper son contexte dans `cq`.
+
+**Aucune fonction n'ouvre `Bash`.** `cqe` et `cqf` écrivent sans confirmation,
+mais leur liste d'outils s'arrête à `Read`, `Edit`, `Write`, `Grep` et `Glob` :
+pas de commande auto-approuvée, et un `git diff` suffit à défaire la passe. La
+liste est déclarée deux fois, en `--permission-mode acceptEdits` et en
+`--allowedTools` explicite, parce que `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` remet
+le mode de permission à `default` dès que la commande est lancée depuis une
+session Claude Code — et c'est justement ce que ce message d'avertissement
+demande de faire.
+
+`cq` tourne en `--safe-mode` : ni `CLAUDE.md`, ni skills, ni MCP, ni hooks. Une
+question qui n'a rien à voir avec le projet courant n'a pas à traîner ses
+conventions, et le démarrage y gagne. Le rendu markdown (`glow`, sinon `bat`)
+ne s'applique que si la sortie va au terminal, pour que `cq … | jq` et
+`git commit -m "$(cqc)"` reçoivent du texte brut. Les modèles et niveaux
+d'effort se surchargent par `CQ_ASK_*`, `CQ_CODE_*` et `CQ_DEEP_*`.
+
 ## Dépendances externes
 
 - **zsh** : oh-my-zsh, plus trois plugins à cloner dans `$ZSH_CUSTOM/plugins/` —
