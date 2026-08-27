@@ -1,0 +1,325 @@
+{{- /* Machine pro : socle « Au-delà de la génération de code ». Ailleurs : les
+       conventions courtes. Le flag work est posé au premier chezmoi init. */ -}}
+{{ if .work -}}
+# CLAUDE.md — Beyond Code Generation
+
+Ce fichier est la fondation universelle du projet. Il est chargé par toutes les conversations, tous les agents et tous les sub-agents. Les principes ici sont **non-négociables**.
+
+## Langue
+
+Toujours répondre en français. Les termes techniques et identifiants de code restent dans leur forme originale.
+
+---
+
+## Framework
+
+Ce projet suit le framework **"Au-delà de la génération de code"** v1.0.0.
+Manifeste : `Manifesto/README.md`
+Socle commun : `Guides/socle-commun.md`
+Guides métiers : `Guides/`
+
+---
+
+## Principes fondamentaux
+
+### Obligation de maîtrise
+
+Ce que tu produis, tu dois pouvoir l'expliquer — ligne par ligne, décision par décision. Si tu ne peux pas l'expliquer, tu ne le livres pas. Ce qui est retenu d'une suggestion LLM devient la décision de celui qui la retient.
+
+### Doute par défaut
+
+Toute sortie d'un LLM est un brouillon à vérifier. Un résultat plausible n'est pas un résultat correct. Un outil qui confirme une intuition ne la valide pas.
+
+### Comprendre avant de produire
+
+Lire le contexte existant (specs, ADR, glossaire, conventions) avant de générer quoi que ce soit. Si le contexte manque, le demander — ne pas combler les trous avec des hypothèses silencieuses.
+
+### Negative space
+
+Définir ce que le système ne doit PAS faire avec autant de rigueur que ce qu'il doit faire :
+- Tests négatifs pour chaque test positif
+- Assertions sur les préconditions, postconditions et invariants
+- Scénarios Gherkin "Then [ce qui ne doit PAS arriver]"
+- Policies as code pour l'infrastructure
+
+### Vocabulaire du domaine
+
+Utiliser les termes du glossaire du projet (`docs/domain/glossary.md` ou équivalent) partout : code, tests, documentation, conversations. Un terme ambigu est un bug de communication. Pas de synonymes non déclarés.
+
+### Traçabilité
+
+Tout livrable est rattachable à sa source :
+- Code → test → AC → story → règle métier
+- Décision technique → ADR
+- Composant UI → story + design system
+- Infrastructure → ADR + policy
+
+---
+
+## Principes de design
+
+### KISS — Keep It Simple, Stupid
+
+La solution la plus simple qui répond au besoin est la meilleure. La complexité est un coût, pas une vertu. Si un CRUD suffit, ne fais pas d'event sourcing. Si un monolithe suffit, ne fais pas de microservices.
+
+### YAGNI — You Ain't Gonna Need It
+
+Ne construis pas pour des besoins hypothétiques. Trois lignes de code similaires valent mieux qu'une abstraction prématurée. N'ajoute pas de configurabilité, de feature flags ou de couches d'abstraction "au cas où". Le bon moment pour généraliser, c'est quand le besoin est réel — pas avant.
+
+### SOLID
+
+**S — Single Responsibility Principle.** Une classe, un module, une fonction a une seule raison de changer. Si tu dois utiliser "et" pour décrire ce qu'il fait, découpe.
+
+**O — Open/Closed Principle.** Le code est ouvert à l'extension, fermé à la modification. On ajoute du comportement sans modifier l'existant qui fonctionne.
+
+**L — Liskov Substitution Principle.** Un sous-type doit pouvoir remplacer son type parent sans casser le comportement. Si un héritage force des exceptions ou des comportements vides, le modèle est faux.
+
+**I — Interface Segregation Principle.** Pas d'interface obèse. Un consommateur ne doit pas dépendre de méthodes qu'il n'utilise pas. Préférer plusieurs interfaces spécialisées à une interface générique.
+
+**D — Dependency Inversion Principle.** Les modules de haut niveau ne dépendent pas des modules de bas niveau — les deux dépendent d'abstractions. Le métier ne dépend pas de l'infrastructure.
+
+### Réversibilité
+
+À options équivalentes, préférer celle qu'on peut défaire. Un choix irréversible nécessite une justification proportionnelle au risque, documentée dans une ADR.
+
+---
+
+## Principes Tidy First (Kent Beck)
+
+### Séparer comportement et structure
+
+Un changement de **comportement** (ce que le code fait) et un changement de **structure** (comment il est organisé) ne sont **jamais** dans le même commit. Cela permet de relire, reverter et comprendre chaque changement indépendamment.
+
+### Tidy First, Tidy After, Tidy Later, Never
+
+Face à du code désordonné, quatre options — chacune est un choix conscient, pas un réflexe :
+- **Tidy First** — ranger AVANT de changer le comportement, quand le désordre gêne la compréhension
+- **Tidy After** — ranger APRÈS, quand le changement a révélé du désordre
+- **Tidy Later** — noter et planifier, quand le nettoyage est utile mais pas urgent
+- **Never** — ne pas ranger, quand le code ne sera plus touché
+
+Un LLM propose volontiers des refactorings massifs en une passe. Préférer les **micro-nettoyages** (tidyings) : petits, séparés, réversibles. Chaque tidying est un geste de quelques lignes — aligner le nommage, extraire un guard clause, supprimer du code mort.
+
+### Couplage = multiplicateur de coût
+
+Le coût d'un changement logiciel = coût du changement × coût du couplage. Réduire le couplage réduit le coût de tous les changements futurs. Chaque dépendance ajoutée est un multiplicateur de coût — la justifier.
+
+### Cohésion = ce qui change ensemble vit ensemble
+
+Les éléments qui changent ensemble devraient vivre ensemble. Ce n'est pas un principe esthétique — c'est une optimisation économique : moins de fichiers touchés par changement = moins de risque.
+
+### Le design est un investissement en options
+
+Ranger le code crée de la **valeur d'option** — ça ne rapporte pas immédiatement, mais ça réduit le coût des changements futurs. L'excès de design (over-engineering) est un investissement sans retour probable. Le bon design maximise les options futures au moindre coût présent.
+
+---
+
+## Évaluation, planification et chargement de contexte
+
+### Classification de risque
+
+Avant chaque tâche d'écriture (code, IaC, documentation structurante), évaluer le niveau de risque :
+
+| Niveau | Critères | Comportement attendu |
+|--------|----------|---------------------|
+| **LOW** | Changement isolé, un seul fichier, pas d'effet de bord, bien couvert par les tests | Exécution directe, vérification standard |
+| **MEDIUM** | Plusieurs fichiers, logique métier, dépendances à vérifier | Vérifier les dépendances avant d'agir, tests plus rigoureux |
+| **HIGH** | Zone critique (sécurité, données, auth, paiement), changement structurel, irréversible, multi-modules | **Planifier d'abord** — produire un plan, le valider avec l'humain, puis exécuter |
+
+L'orchestrateur tague le risque quand il délègue. Le sub-agent peut réévaluer à la hausse (jamais à la baisse sans justification).
+
+### Mode planification
+
+Sur les tâches **HIGH** ou quand le sub-agent juge la complexité élevée, il **propose un plan avant d'exécuter** :
+
+```
+> **Tâche complexe / critique — Mode planification**
+>
+> Avant d'exécuter, voici mon plan :
+> 1. Fichiers concernés : [liste]
+> 2. Dépendances impactées : [liste]
+> 3. Risques identifiés : [liste]
+> 4. Ordre d'exécution : [séquence]
+> 5. Vérifications prévues : [tests, assertions]
+>
+> Tu valides ce plan ?
+```
+
+Le sub-agent n'exécute qu'après validation. Sur les tâches LOW, pas de plan — exécution directe.
+
+### Chargement de contexte adaptatif
+
+Un agent ne charge **pas tout le contexte disponible** — il évalue ce dont il a besoin pour la tâche :
+
+1. **Évaluer la tâche** — Quel est le sujet ? Quels documents sont pertinents ?
+2. **Vérifier ce qu'on a** — Le frontmatter du `load-context` suffit-il ou faut-il lire le contenu ?
+3. **Charger ce qui manque** — Lire uniquement les documents nécessaires, pas tout le projet
+4. **Douter de sa suffisance** — Si un doute existe sur le contexte ("est-ce qu'il y a une ADR sur ce sujet ? une règle métier que je n'ai pas lue ?"), charger le document en question plutôt que deviner
+
+Le principe : **charger le minimum, mais ne jamais risquer de travailler avec un contexte incomplet**. En cas de doute, lire un document de trop vaut mieux que manquer une contrainte.
+
+| Risque | Contexte à charger |
+|--------|-------------------|
+| **LOW** | Conventions + glossaire (frontmatter peut suffire) |
+| **MEDIUM** | + ADR applicables + stories liées (lecture du contenu) |
+| **HIGH** | + toutes les BR du périmètre + ADR complètes + stories + code existant du module |
+
+---
+
+## Contexte narratif du projet
+
+Le CLAUDE.md du projet (celui généré par `sync-claude-md`) doit inclure une section **Contexte narratif** qui raconte l'histoire du projet — pas sa structure, mais son parcours :
+
+- D'où vient ce projet ? Quel problème résout-il ?
+- Quels choix structurants ont été faits et pourquoi ?
+- Quelles sont les zones sensibles (historique d'incidents, dette connue, complexité accidentelle) ?
+- Quel est l'état actuel ? Qu'est-ce qui est stable, qu'est-ce qui est en chantier ?
+
+Ce contexte narratif permet à un agent de faire des **jugements proportionnés** : être plus prudent sur le module d'authentification qui a eu 3 incidents, plus confiant sur l'API CRUD qui est stable depuis 6 mois.
+
+---
+
+## Cycle de développement
+
+### Spec → Test → Implémentation → Revue
+
+Rien n'est implémenté sans spec. Rien n'est livré sans test qui prouve la conformité à la spec. Le LLM accélère les étapes d'implémentation — il ne remplace pas les autres.
+
+### Red → Green → Refactor → Review
+
+- **Red** — Écrire un test qui échoue (dérivé d'un AC). Si le test passe immédiatement, il ne teste probablement rien.
+- **Green** — Le minimum de code pour faire passer le test. Pas d'optimisation, pas de généralisation.
+- **Refactor** — Nettoyer sans changer le comportement. Un tidying à la fois, pas en bloc.
+- **Review** — Revue humaine. Le code est relu par quelqu'un d'autre que son auteur.
+
+---
+
+## Versionnement
+
+- Chaque changement a une raison traçable
+- Chaque livrable est validé par un autre regard
+- Les messages de commit décrivent le pourquoi, pas le quoi
+- Les secrets ne sont jamais versionnés
+- L'historique est lisible et atomique
+- Les changements de comportement et de structure sont dans des commits séparés
+
+---
+
+## Limites et interdits
+
+### Ce qu'un LLM ne fait jamais
+
+- Trancher un arbitrage métier
+- Valider un livrable ("c'est bon", "c'est correct")
+- Recevoir des secrets, données personnelles ou données clients non anonymisées
+- Évaluer la compétence ou la performance d'un membre de l'équipe
+- Prioriser le backlog
+- Se substituer au mentorat humain
+
+### En cas de doute
+
+Si tu hésites à soumettre quelque chose à un LLM, la réponse est non. Le coût de ne pas utiliser l'outil est faible. Le coût d'une fuite est irréversible.
+
+---
+
+## Lisibilité LLM — Convention universelle
+
+Tout document produit dans le projet doit être **immédiatement compréhensible par un LLM** sans parser l'intégralité du contenu. Quatre règles :
+
+1. **Frontmatter YAML obligatoire** — Chaque fichier Markdown porte un frontmatter avec au minimum : `id`, `type`, `status`, `last-updated`. Le frontmatter seul doit suffire à comprendre ce qu'est le document, son état et ses relations.
+
+2. **Identifiants explicites et grepables** — Chaque référence croisée utilise un identifiant formel (`BR-XXX`, `US-XXX`, `ADR-XXX`, `EPIC-XXX`, `AC-XX`, `FF-XXX`, `CONV-XXX`). Un `grep` sur un ID retourne tous les documents liés.
+
+3. **Headings sémantiques** — Les titres de section décrivent le contenu, pas le format. Un LLM qui lit les headings comprend la structure sans lire le corps.
+
+4. **Pas d'implicite** — Tout ce qui est nécessaire pour comprendre le document est dans le document. Pas de "cf. la dernière réunion", pas de contexte oral non transcrit.
+
+---
+
+## Structure documentaire
+
+Le projet organise sa documentation pour couvrir :
+- **Besoin** — objectifs, besoins utilisateurs, règles métier
+- **Domaine** — vocabulaire partagé, invariants métier
+- **Architecture** — décisions techniques (ADR), contrats d'API, vues C4
+- **Design** — principes visuels, composants, accessibilité
+- **Standards** — conventions de code, critères de revue
+- **Dette et défauts** — compromis identifiés, bugs connus
+- **Opérations** — déploiement, monitoring, runbooks
+
+Ce qui n'est pas dans le dépôt n'existe pas.
+
+---
+
+## Outils disponibles
+
+### mgrep (plugin)
+
+Recherche améliorée, plus pertinente que ripgrep/grep. Disponible via le skill `/mgrep`.
+
+- **Recherche locale** : `mgrep "pattern"` — cherche dans le codebase
+- **Recherche web** : `mgrep --web "sujet"` — cherche sur le web
+
+Utiliser mgrep plutôt que Grep quand la recherche nécessite de la pertinence sémantique (pas juste du pattern matching).
+
+### context7 (plugin)
+
+Documentation live des librairies, frameworks, SDK et API. Utiliser **systématiquement** quand :
+- Tu écris du code qui utilise une librairie ou un framework
+- Tu vérifies une syntaxe, une API, une option de configuration
+- Tu doutes de la façon d'utiliser une dépendance
+
+Tes connaissances peuvent être obsolètes. context7 donne la documentation à jour. Préférer context7 à ta mémoire pour tout ce qui concerne les API et librairies tierces.
+{{ else -}}
+# Global Conventions
+
+## Language
+- Always respond in French.
+- Technical terms and code identifiers remain in their original form.
+
+## Project Lifecycle
+- `/init-project` to bootstrap a new project (rules, CLAUDE.md, docs/).
+- `/audit-project` to get a full health report of the codebase.
+- `/security-scan` for a deep security audit (data flow tracing, adversarial validation, patches).
+- `/adr` to reason through architectural decisions before implementing.
+- `/new-feature` to spec a feature (epic, stories, AC, business rules).
+- `/backlog` to see the live product dashboard (progress, blockers, priorities).
+- `/generate-tests` to create failing tests from AC (BDD Red phase).
+- `/implement-feature` to make failing tests pass (BDD Green phase).
+- `/refactor` to improve code while keeping tests green (BDD Refactor phase).
+- `/review-feature` to review changes (auto-detects the right agents).
+- `/review-all` to run all review agents in parallel.
+- `/review-docs` to check documentation coherence against code.
+- `/next-move` to get the most relevant next action.
+- `/easter-egg` to celebrate quality with a personal touch.
+
+## Review Strategy
+- After modifying backend/logic code → /code-review (includes security scan)
+- After modifying frontend components/styles → /ux-review + /css-review
+- After modifying CSS/tokens/tailwind config → /css-review
+- After modifying domain/architecture code → /ddd-review
+- After modifying IaC (Terraform, Docker, Helm) → /infra-review
+- After modifying pipelines (CI/CD) → /cicd-review
+- After modifying documentation → /review-docs
+- Before a release or pentest → /security-scan full
+
+## Product Backlog
+- Epics in `docs/product/epics/`, stories in `docs/product/stories/`.
+- Every story has Given/When/Then acceptance criteria + non-functional criteria.
+- Definition of Done in `docs/product/definition-of-done.md`.
+- Use `/backlog` to check progress, `/backlog ready` to see what to start next.
+
+## Documentation
+- Product documentation lives in `docs/` at the project root.
+- Always use the ubiquitous language from `docs/domain/glossary.md` when it exists.
+- Reference business rule IDs from `docs/domain/business-rules.md` in code comments.
+- Keep documentation in sync with code. When in doubt, run `/review-docs`.
+
+## Quality Principles
+- Read existing code before modifying. Understand first.
+- No hardcoded secrets or credentials in code.
+- All errors must be explicitly handled. No silent swallowing.
+- Prefer editing existing files over creating new ones.
+- Keep solutions simple. Do not over-engineer.
+- Always use community-recommended conventions for the framework and version in use.
+{{ end -}}
