@@ -1,0 +1,4 @@
+prefix=~/.npm-globals
+{{ if stat (joinPath .chezmoi.homeDir ".npmrc.local") -}}
+{{ include (joinPath .chezmoi.homeDir ".npmrc.local") -}}
+{{- end }}
