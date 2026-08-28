@@ -25,9 +25,8 @@ pnpm-lock.yaml
 {{ if ne .chezmoi.os "linux" }}
 # ── Omarchy / Linux uniquement ───────────────────────────────────────────────
 # Overrides Hyprland & co : ne doivent jamais être déployés sur macOS.
+# waybar / walker / mako ont disparu avec le passage au shell Quickshell : les
+# lignes correspondantes ont été retirées plutôt que gardées « au cas où ».
 .config/hypr
-.config/waybar
-.config/walker
-.config/mako
 .config/omarchy
 {{ end }}
