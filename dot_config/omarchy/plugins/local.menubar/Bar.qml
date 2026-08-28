@@ -356,6 +356,8 @@ Item {
 
               Island { Notifications { bar: root } }
 
+              Island { Tapo { bar: root } }
+
               // Dictee, ecrans, reseau et son partagent une seule pastille : ce
               // sont quatre reglages systeme voisins, et la jauge de volume
               // comme la waveform de dictee s'y deplient.
@@ -425,6 +427,8 @@ Item {
               Island { ClaudeUsage { bar: root } }
 
               Island { Notifications { bar: root } }
+
+              Island { Tapo { bar: root } }
 
               Island {
                 Column {

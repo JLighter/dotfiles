@@ -5,6 +5,25 @@
 {{- $email := promptStringOnce . "email" "Email git" -}}
 {{- $work  := promptBoolOnce   . "work"  "Machine professionnelle" -}}
 
+{{- /* Ampoules Tapo. Tout est facultatif : laisser vide désactive proprement
+       la lampe concernée (champ `enabled` de devices.json), ou le widget
+       entier si l'email manque. Une machine sans domotique répond Entrée à
+       tout et n'hérite d'aucune configuration morte.
+
+       Le MOT DE PASSE ne se demande pas ici : il irait en clair dans
+       ~/.config/chezmoi/chezmoi.toml. Il est réclamé par le script
+       .chezmoiscripts/run_once_after_60-tapo.sh, qui le range dans le
+       trousseau. */ -}}
+{{- $tapoUser   := promptStringOnce . "tapo.username" "Email du compte Tapo (vide = pas de domotique)" "" -}}
+{{- $tapoMeuble := "" -}}
+{{- $tapoBureau := "" -}}
+{{- $tapoTv     := "" -}}
+{{- if $tapoUser -}}
+{{-   $tapoMeuble = promptStringOnce . "tapo.meuble" "IP de la lampe meuble (vide = ignorer)" "" -}}
+{{-   $tapoBureau = promptStringOnce . "tapo.bureau" "IP de la lampe bureau (vide = ignorer)" "" -}}
+{{-   $tapoTv     = promptStringOnce . "tapo.tv"     "IP de la lampe tv (vide = ignorer)"     "" -}}
+{{- end -}}
+
 # Le dépôt reste en ~/.dotfiles plutôt qu'en ~/.local/share/chezmoi (défaut).
 sourceDir = {{ printf "%s/.dotfiles" .chezmoi.homeDir | quote }}
 
@@ -12,3 +31,9 @@ sourceDir = {{ printf "%s/.dotfiles" .chezmoi.homeDir | quote }}
     name = {{ $name | quote }}
     email = {{ $email | quote }}
     work = {{ $work }}
+
+[data.tapo]
+    username = {{ $tapoUser | quote }}
+    meuble = {{ $tapoMeuble | quote }}
+    bureau = {{ $tapoBureau | quote }}
+    tv = {{ $tapoTv | quote }}

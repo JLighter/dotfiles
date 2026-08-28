@@ -1,0 +1,620 @@
+#!{{ .chezmoi.homeDir }}/.local/share/tapo-ctl/venv/bin/python
+"""Contrôle local des ampoules TP-Link Tapo (protocole KLAP, sans cloud).
+
+Le mot de passe du compte Tapo n'est jamais stocké en clair : il est lu depuis
+gnome-keyring via `secret-tool`. Voir la commande `tapo-ctl setup` pour l'aide.
+
+Usage :
+    tapo-ctl status                 état lisible de toutes les lampes
+    tapo-ctl waybar                 état agrégé en JSON, pour la pastille de barre
+    tapo-ctl devices                état détaillé par lampe en JSON, pour le panneau
+    tapo-ctl on|off|toggle [cible]  allumer / éteindre / basculer
+    tapo-ctl bri <0-100|+-N> [cible]  luminosité (absolue ou pas relatif)
+    tapo-ctl temp <kelvin> [cible]  température de couleur (mode blanc)
+    tapo-ctl hsv <0-360> <0-100> [cible]  teinte et saturation (mode couleur)
+    tapo-ctl palette                palette du thème Omarchy actif, en JSON
+    tapo-ctl theme                  aligne les lampes allumées sur le thème actif
+    tapo-ctl role <lampe> <role>    fixe le rôle de couleur d'une lampe
+                                    (accent, red, blue... ou `none`)
+    tapo-ctl setup                  rappel de configuration
+
+`cible` vaut un nom de lampe (salon, bureau) ou `all` (défaut).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import colorsys
+import contextlib
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import tomllib
+from pathlib import Path
+
+from kasa import Device
+
+CONFIG_PATH = Path.home() / ".config" / "tapo-ctl" / "devices.json"
+KEYRING_SERVICE = "tapo-ctl"
+
+# Le theme actif d'Omarchy est un lien symbolique reevalue a chaque changement :
+# on relit donc le chemin, jamais une copie mise en cache.
+THEME_PATH = Path.home() / ".local" / "state" / "omarchy" / "current" / "theme"
+PALETTE_PATH = THEME_PATH / "colors.toml"
+
+# Roles proposes aux lampes, dans l'ordre d'affichage du panneau. Tous les
+# themes ne definissent pas les memes : la palette reelle fait foi.
+THEME_ROLES = ["accent", "red", "orange", "yellow", "green", "cyan", "blue", "magenta"]
+
+# Icônes Nerd Font (Omarchy embarque CaskaydiaMono NF)
+ICON_ON = "\U000f0335"   # nf-md-lightbulb_on
+ICON_OFF = "\U000f0336"  # nf-md-lightbulb_outline
+ICON_ERR = "\U000f0028"  # nf-md-alert
+
+
+class TapoError(Exception):
+    """Erreur métier de tapo-ctl, destinée à être affichée à l'utilisateur."""
+
+
+# ─────────────────────────────── Configuration ───────────────────────────────
+
+def load_config() -> dict:
+    if not CONFIG_PATH.exists():
+        raise TapoError(f"Config absente : {CONFIG_PATH}. Lance `tapo-ctl setup`.")
+    try:
+        config = json.loads(CONFIG_PATH.read_text())
+    except json.JSONDecodeError as exc:
+        raise TapoError(f"Config JSON invalide ({CONFIG_PATH}) : {exc}") from exc
+
+    username = config.get("username", "")
+    if not username or username.startswith("REMPLACER"):
+        raise TapoError(f"Renseigne ton email Tapo dans {CONFIG_PATH}.")
+    if not config.get("devices"):
+        raise TapoError(f"Aucune lampe déclarée dans {CONFIG_PATH}.")
+    return config
+
+
+def load_palette() -> dict:
+    """Palette nommée du thème Omarchy actif, sous forme {role: "#rrggbb"}.
+
+    Ne garde que les entrées qui ressemblent vraiment à une couleur : un
+    colors.toml contient aussi `mode = "light"`, qui n'en est pas une.
+    """
+    if not PALETTE_PATH.exists():
+        raise TapoError(f"Palette du thème introuvable : {PALETTE_PATH}")
+    try:
+        data = tomllib.loads(PALETTE_PATH.read_text())
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        raise TapoError(f"Palette illisible ({PALETTE_PATH}) : {exc}") from exc
+
+    palette = {}
+    for key, value in data.items():
+        if isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value.strip()):
+            palette[key] = value.strip().lower()
+    if not palette:
+        raise TapoError(f"Aucune couleur exploitable dans {PALETTE_PATH}")
+    return palette
+
+
+def theme_name() -> str:
+    """Nom du thème actif.
+
+    `current/theme` est un répertoire de fichiers générés, pas un lien vers le
+    thème source : son nom est toujours « theme ». Le nom réel vit à côté, dans
+    `current/theme.name`.
+    """
+    try:
+        return THEME_PATH.with_name("theme.name").read_text().strip() or "inconnu"
+    except OSError:
+        return "inconnu"
+
+
+def hex_to_hsv(value: str) -> tuple[int, int]:
+    """Convertit #rrggbb en (teinte 0-360, saturation 0-100) pour une ampoule.
+
+    La luminance est délibérément ignorée : l'ampoule a déjà sa propre
+    intensité, réglée par l'utilisateur. Reprendre celle de la couleur du thème
+    écraserait son réglage à chaque changement de thème — un thème sombre
+    plongerait la pièce dans le noir.
+    """
+    raw = value.lstrip("#")
+    red, green, blue = (int(raw[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    hue, _, saturation = colorsys.rgb_to_hsv(red, green, blue)
+    return round(hue * 360), round(saturation * 100)
+
+
+def save_config(config: dict) -> None:
+    """Réécrit devices.json de façon atomique.
+
+    Passage par un fichier temporaire puis rename : une coupure en plein
+    écriture laisserait sinon une config tronquée, et l'outil ne démarrerait
+    plus du tout.
+    """
+    tmp = CONFIG_PATH.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
+        tmp.replace(CONFIG_PATH)
+        CONFIG_PATH.chmod(0o600)
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        raise TapoError(f"Écriture impossible dans {CONFIG_PATH} : {exc}") from exc
+
+
+def load_password(username: str) -> str:
+    """Lit le mot de passe Tapo depuis gnome-keyring."""
+    try:
+        result = subprocess.run(
+            ["secret-tool", "lookup", "service", KEYRING_SERVICE, "username", username],
+            capture_output=True, text=True, timeout=10,
+        )
+    except FileNotFoundError as exc:
+        raise TapoError("`secret-tool` introuvable (paquet libsecret).") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise TapoError("Le trousseau ne répond pas — est-il déverrouillé ?") from exc
+
+    # `secret-tool lookup` n'ajoute pas de saut de ligne, mais certaines versions
+    # en émettent un. On retire UNIQUEMENT celui-là : un .strip() global
+    # mangerait une espace initiale ou finale significative du mot de passe.
+    password = result.stdout.removesuffix("\n")
+    if not password:
+        raise TapoError(
+            "Mot de passe absent du trousseau. Enregistre-le avec :\n"
+            f"  secret-tool store --label='Tapo' service {KEYRING_SERVICE} "
+            f"username {username}"
+        )
+    return password
+
+
+def device_config(spec: dict, username: str, password: str) -> dict:
+    """Config de connexion directe : contourne la découverte UDP.
+
+    Nécessaire ici car la box ne relaie pas le broadcast entre Wi-Fi et ethernet.
+    Les paramètres de protocole viennent de devices.json — ils ont été MESURÉS
+    par diagnose.py, jamais devinés (une valeur erronée donne un 403 handshake1).
+    """
+    return {
+        "host": spec["host"],
+        "timeout": 5,
+        "credentials": {"username": username, "password": password},
+        "connection_type": {
+            "device_family": spec.get("family", "SMART.TAPOBULB"),
+            "encryption_type": spec.get("encryption", "KLAP"),
+            "login_version": spec.get("login_version", 2),
+            "https": spec.get("https", False),
+            "http_port": spec.get("port", 80),
+        },
+    }
+
+
+# ──────────────────────────────── Accès lampes ───────────────────────────────
+
+@contextlib.contextmanager
+def single_run_lock(timeout: float = 3.0):
+    """Sérialise les commandes d'écriture entre process concurrents.
+
+    Attend le verrou plutôt que d'abandonner : un cran de molette ignoré est
+    plus déroutant qu'un cran appliqué avec un léger retard. Au-delà du délai,
+    on renonce — mieux vaut perdre un cran que bloquer la barre.
+    """
+    lock_dir = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")
+    lock_path = lock_dir / "tapo-ctl.lock"
+    deadline = time.monotonic() + timeout
+    with open(lock_path, "w") as handle:
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TapoError("Une autre commande tapo-ctl est déjà en cours.")
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def enabled_devices(config: dict) -> list[str]:
+    """Lampes réellement pilotables (les TPAP sont désactivées, cf. issue #1590)."""
+    return [n for n, s in config["devices"].items() if s.get("enabled", True)]
+
+
+def resolve_targets(config: dict, target: str) -> list[str]:
+    devices = config["devices"]
+    if target == "all":
+        active = enabled_devices(config)
+        if not active:
+            raise TapoError("Aucune lampe active. Voir le champ 'enabled' dans la config.")
+        return active
+    if target not in devices:
+        known = ", ".join(devices)
+        raise TapoError(f"Lampe inconnue : '{target}'. Connues : {known}, all.")
+    if not devices[target].get("enabled", True):
+        raison = devices[target].get("_blocage", "désactivée dans la config")
+        raise TapoError(f"'{target}' est désactivée — {raison}")
+    return [target]
+
+
+async def connect(name: str, config: dict, password: str) -> Device:
+    spec = config["devices"][name]
+    cfg = device_config(spec, config["username"], password)
+    return await Device.connect(config=Device.Config.from_dict(cfg))
+
+
+def _offline(name: str, exc: Exception) -> dict:
+    return {
+        "name": name, "alias": name, "online": False, "on": False,
+        "brightness": None, "hue": None, "saturation": None, "color_temp": None,
+        "temp_min": None, "temp_max": None, "can_color": False, "can_temp": False,
+        "error": f"{type(exc).__name__}: {exc}",
+    }
+
+
+async def read_state(name: str, config: dict, password: str) -> dict:
+    """État complet d'une lampe. N'échoue jamais : encode l'erreur dans le résultat.
+
+    Le panneau a besoin de bien plus que l'agrégat de la barre : teinte,
+    saturation, température et les plages réellement supportées — elles varient
+    d'un modèle à l'autre et ne doivent pas être codées en dur côté QML.
+    """
+    try:
+        dev = await connect(name, config, password)
+        try:
+            light = dev.modules.get("Light")
+            state = {
+                "name": name,
+                "alias": dev.alias or name,
+                "online": True,
+                "on": dev.is_on,
+                "brightness": None, "hue": None, "saturation": None,
+                "color_temp": None, "temp_min": None, "temp_max": None,
+                "can_color": False, "can_temp": False,
+                "error": None,
+            }
+            if light is None:
+                return state
+
+            if light.has_feature("brightness"):
+                state["brightness"] = light.brightness
+            if light.has_feature("hsv"):
+                state["can_color"] = True
+                hue, saturation, _ = light.hsv
+                state["hue"] = hue
+                state["saturation"] = saturation
+            if light.has_feature("color_temp"):
+                state["can_temp"] = True
+                state["color_temp"] = light.color_temp
+                feature = light.get_feature("color_temp")
+                if feature is not None:
+                    state["temp_min"] = feature.minimum_value
+                    state["temp_max"] = feature.maximum_value
+            return state
+        finally:
+            await dev.disconnect()
+    except Exception as exc:  # noqa: BLE001 — on remonte l'erreur, on ne l'avale pas
+        return _offline(name, exc)
+
+
+async def read_all(config: dict, password: str, names: list[str]) -> list[dict]:
+    """Interroge les lampes en parallèle : le temps total = la plus lente."""
+    return await asyncio.gather(*(read_state(n, config, password) for n in names))
+
+
+async def apply_theme(config: dict, password: str, palette: dict) -> list[str]:
+    """Aligne chaque lampe sur la couleur du thème correspondant à son rôle.
+
+    Ne touche QUE les lampes déjà allumées. Un changement de thème ne doit
+    jamais allumer une lampe : basculer de thème à deux heures du matin
+    n'éclaire pas la maison.
+    """
+    states = await read_all(config, password, enabled_devices(config))
+    results = []
+    pending = []
+
+    for state in states:
+        name = state["name"]
+        role = config["devices"][name].get("theme_color")
+
+        if not role or role == "none":
+            results.append(f"  - {name} : ne suit pas le thème")
+        elif not state["online"]:
+            results.append(f"  ✗ {name} : injoignable")
+        elif not state["on"]:
+            results.append(f"  - {name} : éteinte, inchangée")
+        elif role not in palette:
+            results.append(f"  ✗ {name} : rôle '{role}' absent de ce thème")
+        elif not state["can_color"]:
+            results.append(f"  ✗ {name} : ne gère pas la couleur")
+        else:
+            hue, saturation = hex_to_hsv(palette[role])
+            pending.append(apply(name, config, password, "hsv", (hue, saturation)))
+            results.append(f"  ✓ {name} : {role} {palette[role]} (teinte {hue}deg)")
+
+    if pending:
+        applied = await asyncio.gather(*pending)
+        failures = [line for line in applied if line.startswith("  ✗")]
+        results.extend(failures)
+    return results
+
+
+async def apply_all(config: dict, password: str, names: list[str], action: str,
+                    value: int | None, relative: bool = False) -> list[str]:
+    """Applique l'action à toutes les cibles en parallèle."""
+    return await asyncio.gather(
+        *(apply(n, config, password, action, value, relative) for n in names)
+    )
+
+
+async def apply(name: str, config: dict, password: str, action: str,
+                value: int | None, relative: bool = False) -> str:
+    """Applique une action et retourne un compte-rendu d'une ligne."""
+    try:
+        dev = await connect(name, config, password)
+        try:
+            if action == "on":
+                await dev.turn_on()
+            elif action == "off":
+                await dev.turn_off()
+            elif action == "toggle":
+                await (dev.turn_off() if dev.is_on else dev.turn_on())
+            elif action in ("bri", "temp"):
+                light = dev.modules.get("Light")
+                if light is None:
+                    raise TapoError(f"{name} n'expose pas de module Light.")
+                if action == "bri":
+                    target = value
+                    if relative:
+                        # Une lampe éteinte est à 0 pour le calcul : un cran de
+                        # molette vers le haut la rallume en douceur au lieu de
+                        # la relancer au niveau où elle avait été éteinte.
+                        current = light.brightness if dev.is_on else 0
+                        target = current + value
+                    target = max(1, min(100, target))  # 0 % éteindrait sans le dire
+                    if not 0 <= target <= 100:
+                        raise TapoError("Luminosité attendue entre 0 et 100.")
+                    if not dev.is_on:
+                        await dev.turn_on()
+                    await light.set_brightness(target)
+                else:
+                    feature = light.get_feature("color_temp")
+                    if feature is None:
+                        raise TapoError(f"{name} ne gère pas la température de couleur.")
+                    lo, hi = feature.minimum_value, feature.maximum_value
+                    if not lo <= value <= hi:
+                        raise TapoError(f"{name} : température hors plage ({lo}-{hi} K).")
+                    if not dev.is_on:
+                        await dev.turn_on()
+                    await light.set_color_temp(value)
+            elif action == "hsv":
+                light = dev.modules.get("Light")
+                if light is None or not light.has_feature("hsv"):
+                    raise TapoError(f"{name} ne gère pas la couleur.")
+                hue, saturation = value
+                if not 0 <= hue <= 360:
+                    raise TapoError("Teinte attendue entre 0 et 360.")
+                if not 0 <= saturation <= 100:
+                    raise TapoError("Saturation attendue entre 0 et 100.")
+                if not dev.is_on:
+                    await dev.turn_on()
+                # `value=None` conserve la luminosité courante : régler une
+                # couleur ne doit pas réinitialiser l'intensité au passage.
+                await light.set_hsv(hue, saturation, None)
+            else:
+                raise TapoError(f"Action inconnue : {action}")
+            return f"  ✓ {name}"
+        finally:
+            await dev.disconnect()
+    except TapoError as exc:
+        return f"  ✗ {name} : {exc}"
+    except Exception as exc:  # noqa: BLE001
+        return f"  ✗ {name} : {type(exc).__name__}: {exc}"
+
+
+# ──────────────────────────────── Rendu waybar ───────────────────────────────
+
+def render_waybar(states: list[dict]) -> dict:
+    """Construit la charge JSON consommée par la barre.
+
+    Trois lampes -> trois états à distinguer, dont l'état MIXTE. Un simple
+    « allumé si au moins une lampe est allumée » serait trompeur : éteindre une
+    lampe sur trois ne changerait rien à l'affichage, et on croirait son
+    raccourci raté. En mixte on affiche donc un compteur explicite (2/3).
+    """
+    reachable = [s for s in states if s["online"]]
+    lit = [s for s in reachable if s["on"]]
+
+    if not reachable:
+        detail = "\n".join(f"{s['name']} : {s['error']}" for s in states)
+        return {"text": ICON_ERR, "tooltip": f"Lampes injoignables\n{detail}",
+                "class": "error", "percentage": 0, "lit": 0, "total": 0}
+
+    total, count = len(reachable), len(lit)
+    if count == 0:
+        text, css_class = ICON_OFF, "off"
+    elif count == total:
+        text, css_class = ICON_ON, "on"
+    else:
+        text, css_class = f"{ICON_ON} {count}/{total}", "mixed"
+
+    # Moyenne sur les seules lampes allumées : « à quel niveau éclaire ce qui
+    # éclaire ». Inclure les lampes éteintes tirerait la valeur vers 0 et
+    # rendrait la molette illisible.
+    levels = [s["brightness"] for s in lit if s["brightness"] is not None]
+    average = round(sum(levels) / len(levels)) if levels else 0
+
+    tooltip_lines = [
+        f"{s['alias']} : {'allumée' if s['on'] else 'éteinte'}"
+        + (f" — {s['brightness']}%" if s["on"] and s["brightness"] is not None else "")
+        for s in reachable
+    ]
+    tooltip_lines += [f"{s['name']} : injoignable" for s in states if not s["online"]]
+
+    return {"text": text, "tooltip": "\n".join(tooltip_lines), "class": css_class,
+            "percentage": average, "lit": count, "total": total}
+
+
+# ─────────────────────────────────── Entrée ──────────────────────────────────
+
+SETUP_HELP = """Configuration de tapo-ctl
+
+1. Renseigne ton email de compte Tapo dans :
+     {config}
+
+2. Enregistre le mot de passe dans le trousseau (il te sera demandé) :
+     secret-tool store --label='Compte Tapo' service {service} username TON_EMAIL
+
+3. Vérifie :
+     tapo-ctl status
+"""
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+
+    command = args[0]
+    if command == "setup":
+        print(SETUP_HELP.format(config=CONFIG_PATH, service=KEYRING_SERVICE))
+        return 0
+
+    def fail(exc: TapoError) -> int:
+        # La barre lit stdout : lui rendre du texte brut casserait son parsing.
+        # Une erreur doit rester du JSON valide, sinon la pastille disparait.
+        if command == "waybar":
+            print(json.dumps({"text": ICON_ERR, "tooltip": str(exc), "class": "error"}))
+            return 0
+        if command == "devices":
+            print(json.dumps({"devices": [], "error": str(exc)}, ensure_ascii=False))
+            return 0
+        print(f"Erreur : {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        config = load_config()
+    except TapoError as exc:
+        return fail(exc)
+
+    try:
+        # `palette` ne joint aucune lampe : ni trousseau ni reseau. Le panneau
+        # l'appelle a chaque ouverture pour peindre ses pastilles.
+        if command == "palette":
+            palette = load_palette()
+            assigned = {
+                name: spec.get("theme_color")
+                for name, spec in config["devices"].items()
+                if spec.get("enabled", True)
+            }
+            print(json.dumps({
+                "theme": theme_name(),
+                "colors": palette,
+                "roles": [r for r in THEME_ROLES if r in palette],
+                "assigned": assigned,
+            }, ensure_ascii=False))
+            return 0
+
+        if command == "role":
+            if len(args) < 3:
+                raise TapoError("Usage : `tapo-ctl role <lampe> <role|none>`")
+            name, role = args[1], args[2]
+            if name not in config["devices"]:
+                known = ", ".join(config["devices"])
+                raise TapoError(f"Lampe inconnue : '{name}'. Connues : {known}.")
+            palette = load_palette()
+            if role != "none" and role not in palette:
+                available = ", ".join(r for r in THEME_ROLES if r in palette)
+                raise TapoError(f"Rôle inconnu : '{role}'. Disponibles : {available}, none.")
+
+            config["devices"][name]["theme_color"] = None if role == "none" else role
+            save_config(config)
+            print(f"  {name} suit désormais : {role}")
+
+            if role != "none":
+                password = load_password(config["username"])
+                with single_run_lock():
+                    print("\n".join(asyncio.run(apply_theme(config, password, palette))))
+            return 0
+
+        if command == "theme":
+            palette = load_palette()
+            password = load_password(config["username"])
+            with single_run_lock():
+                results = asyncio.run(apply_theme(config, password, palette))
+            print(f"Thème actif : {theme_name()}")
+            print("\n".join(results))
+            return 0
+
+        # Le trousseau n'est lu qu'apres validation des arguments : une faute de
+        # frappe doit etre signalee tout de suite, sans dependre du keyring.
+        if command in ("status", "waybar", "devices"):
+            password = load_password(config["username"])
+            states = asyncio.run(read_all(config, password, enabled_devices(config)))
+            if command == "waybar":
+                print(json.dumps(render_waybar(states), ensure_ascii=False))
+            elif command == "devices":
+                # Etat par lampe, consommé par le panneau de la barre.
+                print(json.dumps({"devices": states}, ensure_ascii=False))
+            else:
+                for s in states:
+                    if not s["online"]:
+                        print(f"  {s['name']:10s} injoignable — {s['error']}")
+                    else:
+                        level = f" ({s['brightness']}%)" if s["brightness"] is not None else ""
+                        print(f"  {s['name']:10s} {'ON ' if s['on'] else 'OFF'}{level}  [{s['alias']}]")
+            return 0
+
+        relative = False
+        if command in ("on", "off", "toggle"):
+            target = args[1] if len(args) > 1 else "all"
+            value = None
+        elif command in ("bri", "temp"):
+            if len(args) < 2:
+                raise TapoError(f"Valeur manquante : `tapo-ctl {command} <valeur> [cible]`")
+            raw = args[1]
+            relative = raw[0] in "+-"  # `bri +10` = molette, `bri 40` = absolu
+            try:
+                value = int(raw)
+            except ValueError as exc:
+                raise TapoError(f"Valeur numérique attendue, reçu '{raw}'.") from exc
+            if relative and command == "temp":
+                raise TapoError("Le pas relatif n'est géré que pour `bri`.")
+            target = args[2] if len(args) > 2 else "all"
+        elif command == "hsv":
+            if len(args) < 3:
+                raise TapoError("Usage : `tapo-ctl hsv <teinte 0-360> <saturation 0-100> [cible]`")
+            try:
+                value = (int(args[1]), int(args[2]))
+            except ValueError as exc:
+                raise TapoError(f"Deux entiers attendus, reçu '{args[1]} {args[2]}'.") from exc
+            # Plages universelles en HSV : inutile de joindre la lampe pour
+            # savoir qu'une teinte de 400 degres n'existe pas.
+            if not 0 <= value[0] <= 360:
+                raise TapoError(f"Teinte attendue entre 0 et 360, reçu {value[0]}.")
+            if not 0 <= value[1] <= 100:
+                raise TapoError(f"Saturation attendue entre 0 et 100, reçu {value[1]}.")
+            target = args[3] if len(args) > 3 else "all"
+        else:
+            raise TapoError(f"Commande inconnue : '{command}'. Voir `tapo-ctl --help`.")
+
+        names = resolve_targets(config, target)
+        password = load_password(config["username"])
+        # La molette envoie des crans plus vite que les lampes ne répondent
+        # (~300 ms par handshake KLAP). Sans ce verrou, les process s'empilent
+        # et les lampes reçoivent les paliers dans le désordre.
+        with single_run_lock():
+            results = asyncio.run(apply_all(config, password, names, command, value, relative))
+        failed = [r for r in results if r.startswith("  ✗")]
+        print("\n".join(results))
+        return 1 if failed else 0
+
+    except TapoError as exc:
+        return fail(exc)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

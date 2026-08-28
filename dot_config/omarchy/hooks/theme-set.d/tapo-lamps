@@ -1,0 +1,23 @@
+#!/bin/bash
+# Aligne les ampoules Tapo sur le thème Omarchy qui vient d'être appliqué.
+#
+# Omarchy a déjà régénéré ~/.local/state/omarchy/current/theme/colors.toml ; on
+# y relit la palette et chaque lampe reprend la couleur du rôle qui lui est
+# assigné dans ~/.config/tapo-ctl/devices.json (accent, blue, magenta...).
+# Une lampe dont le rôle vaut null est laissée tranquille.
+#
+# Seules les lampes DÉJÀ ALLUMÉES sont touchées : changer de thème ne doit
+# jamais allumer la maison.
+#
+# Appelé par omarchy-hook avec le nom du thème en $1 (inutilisé : tapo-ctl relit
+# lui-même le thème courant, ce qui garde le script correct s'il est lancé à la
+# main).
+
+TAPO_CTL="$HOME/.local/bin/tapo-ctl"
+
+[[ -x $TAPO_CTL ]] || exit 0
+
+# Les trois ampoules répondent en ~1 s ; au-delà, elles sont hors tension ou
+# absentes du réseau. On abandonne sans bruit plutôt que de retarder le
+# changement de thème, qui est une action interactive.
+timeout 15 "$TAPO_CTL" theme >/dev/null 2>&1 || exit 0
