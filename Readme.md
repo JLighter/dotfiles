@@ -57,11 +57,17 @@ Après un `git pull` manuel, un `chezmoi apply` suffit.
 
 chezmoi encode les métadonnées dans le nom des fichiers du dépôt :
 
-| Source                          | Cible                     |
-| ------------------------------- | ------------------------- |
-| `dot_zshrc.tmpl`                | `~/.zshrc` (template)     |
-| `dot_config/nvim/`              | `~/.config/nvim/`         |
-| `dot_claude/hooks/executable_*` | fichier déployé en `+x`   |
+| Source                          | Cible                                          |
+| ------------------------------- | ---------------------------------------------- |
+| `dot_zshrc.tmpl`                | `~/.zshrc` (template)                          |
+| `dot_config/nvim/`              | `~/.config/nvim/`                              |
+| `dot_claude/hooks/executable_*` | fichier déployé en `+x`                        |
+| `private_shell.json`            | déployé en `0600`                              |
+| `create_private_devices.json.tmpl` | créé s'il manque, **jamais réécrit** ensuite |
+
+Le préfixe `create_` est la réponse aux fichiers que l'application modifie
+elle-même : le dépôt fournit la graine, le programme reste maître ensuite. Sans
+lui, chaque `apply` écraserait les réglages faits depuis l'interface.
 
 Les fichiers commençant par un point dans le dépôt (`.gitignore`, `.chezmoiignore`)
 sont **ignorés** par chezmoi : ils servent au dépôt, pas à `$HOME`.
@@ -158,6 +164,62 @@ relance.
 > le prochain `chezmoi apply` écrase donc le choix. Pour changer de police
 > durablement : l'éditer dans le dépôt, ou récupérer le choix d'Omarchy avec
 > `chezmoi add ~/.config/ghostty/config`.
+
+### Le shell Quickshell
+
+`~/.config/omarchy/shell.json` décrit la barre : disposition, plugins activés,
+réglages par widget. Il est versionné **tel quel**, car c'est précisément ce
+qu'on veut retrouver à l'identique d'une machine à l'autre.
+
+Deux réserves, à connaître :
+
+- `primaryScreen` en est retiré. Il vaut `DP-2` ici, ce qui ne veut rien dire
+  ailleurs ; sans lui le shell choisit l'écran seul.
+- Omarchy **réécrit ce fichier** lors de certaines migrations (le passage à
+  Quattro a renommé tous les ids `whiterose.*` en `omarchy.*`). Après un
+  `omarchy update` qui touche la barre, récupérer le résultat avec
+  `chezmoi re-add ~/.config/omarchy/shell.json` — sinon le prochain `apply`
+  restaure la version d'avant migration et casse la barre.
+
+Les plugins maison vivent dans `.config/omarchy/plugins/local.*`. `Bar.qml`
+instancie chaque widget en dur : un widget dont l'outil sous-jacent est absent
+doit donc se retirer lui-même de la barre plutôt que de ne pas être déployé.
+`Voxtype.qml` et `Tapo.qml` suivent tous deux ce motif — une sonde `Process` au
+démarrage, une propriété `installed`, un `visible` qui en dépend.
+
+### Domotique Tapo
+
+Trois ampoules TP-Link pilotées en local, sans cloud. Quatre pièces :
+
+| Fichier                                        | Rôle                                      |
+| ---------------------------------------------- | ----------------------------------------- |
+| `dot_local/bin/executable_tapo-ctl.tmpl`       | l'outil ; shebang templaté vers son venv  |
+| `dot_config/tapo-ctl/create_private_devices.json.tmpl` | inventaire des lampes             |
+| `dot_config/omarchy/plugins/local.menubar/Tapo.qml` | la pastille et son panneau           |
+| `dot_config/omarchy/hooks/theme-set.d/tapo-lamps` | aligne les lampes sur le thème actif   |
+
+**Trois niveaux de confidentialité**, traités différemment :
+
+- Les *préférences* (noms des lampes, modèles, rôles de couleur) sont dans le
+  dépôt : elles doivent suivre d'une machine à l'autre.
+- L'*email du compte* et les *adresses IP* sont demandés par `chezmoi init` et
+  mémorisés dans `~/.config/chezmoi/chezmoi.toml`. Ils dépendent du réseau, pas
+  des goûts. Répondre vide désactive proprement la lampe concernée
+  (champ `enabled`), et un email vide n'installe aucune domotique du tout.
+- Le *mot de passe* n'est ni dans le dépôt ni dans `chezmoi.toml`, qui sont du
+  texte en clair. `.chezmoiscripts/run_once_after_60-tapo.sh` le réclame au
+  premier `apply` et le range dans le trousseau, d'où `tapo-ctl` le relit via
+  `secret-tool`. Pour le changer ensuite :
+
+  ```sh
+  secret-tool store --label='Tapo' service tapo-ctl username <ton-email-tapo>
+  ```
+
+Le même script installe `python-kasa` dans un venv dédié
+(`~/.local/share/tapo-ctl/venv`) plutôt qu'en paquet système : le shebang de
+`tapo-ctl` pointe droit dessus, à l'abri des montées de version de Python
+d'Arch. Une machine sans compte Tapo ne reçoit rien de tout ça, et la pastille
+se retire d'elle-même de la barre.
 
 ## Claude Code
 
