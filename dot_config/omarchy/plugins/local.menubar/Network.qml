@@ -852,21 +852,20 @@ BarWidget {
     }
   }
 
-  Text {
+  // L'encre du glyphe ne remplit pas sa boite symetriquement — celle de
+  // l'ethernet penche vers la droite. On corrigeait ce bearing d'un decalage
+  // constant ; `OpticalGlyph` le mesure a la place, et suit donc le glyphe
+  // affiche au lieu de supposer lequel c'est.
+  OpticalGlyph {
     id: glyphLabel
 
-    // L'encre du glyphe ethernet ne remplit pas sa boite symetriquement : elle
-    // penche vers la droite. On decale la boite d'autant, a l'echelle du theme
-    // comme le bearing qu'elle corrige.
-    x: root.contentGap - Style.spaceReal(1.5)
+    x: root.contentGap
     width: root.glyphWidth
+    height: parent.height
     text: root.connectionGlyph()
     color: root.online ? root.foregroundColor : root.mutedColor
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.body
-    renderType: Text.NativeRendering
-    horizontalAlignment: Text.AlignHCenter
-    anchors.verticalCenter: parent.verticalCenter
+    fontFamily: root.fontFamily
+    fontSize: Style.font.body
   }
 
   // Les debits glissent hors du cadre quand celui-ci se replie.

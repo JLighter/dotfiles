@@ -357,20 +357,22 @@ BarWidget {
     }
   }
 
-  WidgetButton {
+  // `BarIconButton` comme les trois autres widgets de l'ilot : le glyphe du
+  // micro tombe deja a peu pres centre, le recentrage optique n'y change presque
+  // rien — mais les quatre boutons doivent mesurer leur encre de la meme facon,
+  // sinon celui qui ne le fait pas parait decale par rapport a ses voisins.
+  BarIconButton {
     id: button
 
     bar: root.bar
     text: root.currentGlyph
+    fontSize: Style.font.body
     // Le micro s'allume pendant que voxtype ecoute : c'est le seul etat que la
     // barre doit pouvoir signaler d'un coup d'oeil.
     active: root.listening
     tooltipText: root.stateLabel
     fixedWidth: root.buttonSize
     fixedHeight: root.islandSize
-    // Reste un `WidgetButton` la ou Displays est passe a `BarIconButton` : le
-    // glyphe du micro tombe deja centre dans son bouton, il n'a pas de bearing
-    // a rattraper et rien a gagner au recentrage optique.
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) root.toggleRecording()
       else root.toggle()
