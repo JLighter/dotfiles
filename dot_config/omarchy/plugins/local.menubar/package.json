@@ -1,0 +1,9 @@
+{
+  "name": "local-menubar-model",
+  "private": true,
+  "type": "commonjs",
+  "description": "Borne la resolution de modules node au plugin : `node --test tests/`",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

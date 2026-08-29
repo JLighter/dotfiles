@@ -5,20 +5,29 @@ import Quickshell.Io
 import Quickshell.Services.Mpris
 import qs.Commons
 import qs.Ui
+import "CliampModel.js" as Model
 
 // Widget cliamp : le spectre en direct dans la barre, et au clic un panneau
 // avec le morceau, les controles et les favoris radio.
 //
-// Trois canaux, chacun pour ce qu'il fait de mieux :
+// Quatre canaux, chacun pour ce qu'il fait de mieux :
 //   - MPRIS (org.mpris.MediaPlayer2.cliamp) pour l'etat et le transport : il
 //     pousse ses changements, aucun sondage necessaire ;
+//   - le socket de commande, tenu ouvert, pour ce que MPRIS ne dit pas : le
+//     volume en dB, l'album, la position dans la file, le mode de repetition ;
 //   - `cliamp visstream`, un flux NDJSON d'une frame par ligne, pour le
 //     spectre ;
-//   - le socket de commande, via la CLI, pour le volume et les stations, que
-//     MPRIS n'expose pas.
+//   - la CLI, pour les mutations : elles sont rares, declenchees par un clic,
+//     et l'interface en ligne de commande est la seule stable — le schema des
+//     requetes du socket, lui, n'est pas documente.
 //
 // Le widget reste dans la barre meme sans cliamp : le spectre retombe a plat
-// et le bouton de lecture du panneau demarre alors le lecteur.
+// et le bouton de lecture du panneau demarre alors le lecteur. Il fonctionne
+// aussi sans MPRIS — une seconde instance de cliamp perd le nom D-Bus mais
+// garde son socket, et le panneau reste alors pilotable.
+//
+// La logique de lecture des formats vit dans CliampModel.js, testee par
+// `node --test tests/`.
 BarWidget {
   id: root
   moduleName: "local.menubar.cliamp"
@@ -53,6 +62,8 @@ BarWidget {
     return Item.Top
   }
 
+  readonly property string cliampDir: Quickshell.env("HOME") + "/.config/cliamp"
+
   // --- Lecteur MPRIS ---------------------------------------------------------
 
   readonly property var player: {
@@ -68,34 +79,191 @@ BarWidget {
     return null
   }
 
-  readonly property bool available: player !== null
-  readonly property bool playing: available && player.isPlaying
-  readonly property string trackTitle: available ? String(player.trackTitle || "") : ""
-  readonly property string trackArtist: available ? String(player.trackArtist || "") : ""
-  readonly property real trackLength: available && player.lengthSupported ? player.length : 0
-  readonly property string streamUrl: available && player.metadata
-    ? String(player.metadata["xesam:url"] || "")
-    : ""
+  readonly property bool hasMpris: player !== null
 
-  // Nom du favori correspondant au flux en cours, s'il en fait partie.
-  readonly property string favoriteName: {
-    var url = streamUrl || trackTitle
-    if (!url) return ""
+  // --- Socket de commande ----------------------------------------------------
+  // Une connexion tenue ouverte remplace trois `Process` par sondage : le
+  // `test -S` qui cherchait le socket, le `cliamp status` toutes les deux
+  // secondes, et le `printf … | socat` qui lisait la file.
+  //
+  // Elle repare surtout une confusion : `test -S` ne distingue pas un socket
+  // vivant d'un socket laisse derriere lui par un cliamp mort. Le widget
+  // croyait alors le lecteur present et relancait `visstream` dans le vide
+  // toutes les deux secondes. Une connexion, elle, est refusee.
 
-    for (var i = 0; i < favorites.length; i++) {
-      if (String(favorites[i].url || "") === url) return String(favorites[i].name || "")
+  property var playerStatus: Model.emptyStatus()
+  property bool socketPresent: false
+  property string ipcBuffer: ""
+
+  Socket {
+    id: ipc
+
+    path: root.cliampDir + "/cliamp.sock"
+
+    parser: SplitParser {
+      splitMarker: "\n"
+      onRead: function(line) { root.onIpcLine(line) }
     }
-    return ""
+
+    onConnectionStateChanged: {
+      // Peu frequent, et ce widget s'est revele assez difficile a diagnostiquer
+      // pour que la trace vaille son cout dans le log du shell.
+      console.log("local.menubar.cliamp: socket", ipc.connected ? "connecte" : "deconnecte")
+
+      if (ipc.connected) {
+        root.ipcBuffer = ""
+        root.requestStatus()
+      }
+    }
+
+    // Ni une deconnexion ni une erreur ne prouvent quoi que ce soit : le schema
+    // des requetes n'etant pas documente, on ne sait pas si cliamp garde la
+    // connexion ouverte ou la referme apres chaque reponse — et un « peer
+    // closed » ne se distingue d'un « connection refused » que par un code
+    // d'erreur sur lequel on ne veut pas parier. C'est le chien de garde
+    // ci-dessous qui tranche, sur le seul fait qui compte : une reponse
+    // recente, ou non.
   }
 
-  // Tant qu'un flux n'a pas envoye ses metadonnees ICY, cliamp annonce son URL
-  // comme titre. On lui substitue alors le nom de la station, faute de quoi la
-  // barre afficherait « http://usa9.fastcast4u.com/proxy/… ».
-  readonly property string displayTitle: {
-    if (trackTitle !== "" && !/^https?:\/\//.test(trackTitle)) return trackTitle
-    if (favoriteName !== "") return favoriteName
-    return trackTitle !== "" ? "Radio" : ""
+  // Une seule cadence pour les trois timers ci-dessous. Ils se repondent, et
+  // les desynchroniser coute cher : un chien de garde plus court que l'intervalle
+  // de sondage ne peut jamais gagner — il declare cliamp perdu entre deux
+  // statuts, tue `visstream`, la reconnexion le relance, et le spectre de la
+  // barre passe son temps a mourir et renaitre.
+  readonly property int pollInterval: opened ? 2000 : 10000
+
+  // Trois sondages sans reponse et cliamp est declare parti. Conclure sur une
+  // seule deconnexion ferait clignoter le spectre a chaque cycle si cliamp
+  // referme apres sa reponse.
+  property int missedStatus: 0
+
+  Timer {
+    interval: root.pollInterval
+    running: true
+    repeat: true
+    onTriggered: {
+      if (!root.socketPresent) return
+
+      root.missedStatus += 1
+      if (root.missedStatus >= 3) root.onIpcLost()
+    }
   }
+
+  function onIpcLost() {
+    socketPresent = false
+    ipcBuffer = ""
+    // On garde le dernier statut connu : l'affichage se gouverne a `available`,
+    // et l'effacer ne ferait que vider le panneau d'un coup pour rien.
+    ipc.connected = false
+  }
+
+  // cliamp repond en JSON indente : le decoupage sur « \n » ne rend que des
+  // morceaux, qu'on accumule jusqu'a tenir un objet complet.
+  function onIpcLine(line) {
+    ipcBuffer += line
+
+    if (!Model.isCompleteJson(ipcBuffer)) {
+      // Garde-fou : une reponse qui ne se referme jamais ne doit pas faire
+      // enfler le tampon indefiniment.
+      if (ipcBuffer.length > 65536) ipcBuffer = ""
+      return
+    }
+
+    var parsed = Model.parseStatus(ipcBuffer)
+    ipcBuffer = ""
+    if (parsed) root.applyStatus(parsed)
+  }
+
+  function applyStatus(parsed) {
+    playerStatus = parsed
+
+    // Une reponse est la seule preuve que cliamp est bien la, derriere ce
+    // socket, et pas seulement un fichier laisse par un processus mort.
+    socketPresent = true
+    missedStatus = 0
+
+    // Station cliquee avant que cliamp ne soit joignable : elle attendait ce
+    // moment precis.
+    if (pendingStationUrl !== "") {
+      var wanted = pendingStationUrl
+      pendingStationUrl = ""
+      sendStation(wanted)
+    }
+
+    // Le volume ne remonte que d'ici : MPRIS l'exprime en amplitude relative au
+    // maximum de cliamp (1.0 vaut +6 dB), pas en dB. On ne l'ecrase pas tant
+    // qu'un reglage est en attente d'envoi, sinon la molette recule.
+    if (parsed.hasVolume && isNaN(pendingVolumeDb)) volumeDb = parsed.volume
+
+    // Sans MPRIS, le statut est la seule source de position.
+    if (!hasMpris) livePosition = parsed.position
+
+    if (opened && !nextProc.running) nextProc.running = true
+  }
+
+  function requestStatus() {
+    if (!ipc.connected) return
+
+    ipc.write('{"cmd":"status"}\n')
+    ipc.flush()
+  }
+
+  // Tant que la connexion est ouverte, on redemande le statut ; si cliamp la
+  // ferme apres chaque reponse, c'est le timer de reconnexion ci-dessous qui
+  // prend le relais. Les deux ensemble marchent quel que soit le comportement
+  // du serveur.
+  Timer {
+    interval: root.opened ? 2000 : 10000
+    running: ipc.connected
+    repeat: true
+    onTriggered: root.requestStatus()
+  }
+
+  Timer {
+    interval: root.opened ? 2000 : 10000
+    running: !ipc.connected
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: ipc.connected = true
+  }
+
+  // Apres une commande, le statut a change mais le tour de sondage est loin :
+  // on redemande plus tot pour que le panneau suive le clic.
+  Timer {
+    id: refreshSoon
+
+    interval: 400
+    repeat: false
+    onTriggered: root.requestStatus()
+  }
+
+  // --- Etat de lecture -------------------------------------------------------
+  // MPRIS d'abord : il pousse ses changements et le titre suit la piste sans
+  // delai. Le statut prend le relais quand le nom D-Bus n'est pas la.
+
+  readonly property bool available: hasMpris || socketPresent
+  readonly property bool playing: hasMpris ? player.isPlaying : playerStatus.playing
+  readonly property string trackTitle: hasMpris ? String(player.trackTitle || "") : playerStatus.title
+  readonly property string trackArtist: hasMpris ? String(player.trackArtist || "") : playerStatus.artist
+  readonly property string trackAlbum: playerStatus.album
+  readonly property real trackLength: hasMpris && player.lengthSupported && player.length > 0
+    ? player.length
+    : playerStatus.duration
+  readonly property string streamUrl: {
+    if (hasMpris && player.metadata) {
+      var url = String(player.metadata["xesam:url"] || "")
+      if (url !== "") return url
+    }
+    return playerStatus.path
+  }
+
+  // Une piste se scrute des qu'elle a une duree. Le drapeau `stream` ne sert a
+  // rien : cliamp le met aussi a vrai pour les pistes de bibliotheque servies
+  // en HTTP, qui elles se scrutent tres bien.
+  readonly property bool seekable: trackLength > 0
+
+  readonly property string favoriteName: Model.favoriteNameFor(favorites, streamUrl || trackTitle)
+  readonly property string displayTitle: Model.displayTitle(trackTitle, favoriteName)
 
   property real livePosition: 0
 
@@ -103,46 +271,49 @@ BarWidget {
     interval: 500
     running: root.available && root.playing && root.opened
     repeat: true
-    onTriggered: root.livePosition = root.player.position
+    // Sans MPRIS personne ne pousse la position : on l'avance nous-memes entre
+    // deux statuts, qui la recalent.
+    onTriggered: root.livePosition = root.hasMpris ? root.player.position : root.livePosition + 0.5
   }
 
   Connections {
     target: root.player
-    enabled: root.available
+    enabled: root.hasMpris
+
     function onPositionChanged() { root.livePosition = root.player.position }
-    function onTrackTitleChanged() { root.livePosition = 0 }
+    function onTrackTitleChanged() {
+      root.livePosition = 0
+      // La piste a change : le statut et la piste suivante sont perimes.
+      refreshSoon.restart()
+    }
   }
 
-  function formatTime(seconds) {
-    if (!isFinite(seconds) || seconds < 0) return "--:--"
+  // --- Piste suivante --------------------------------------------------------
+  // `next-track` est un plugin Lua de cliamp, en lecture seule et sans
+  // permission. S'il n'est pas installe — ou pas approuve par
+  // `cliamp plugins trust next-track` — l'appel echoue et la ligne disparait
+  // simplement du panneau.
 
-    var total = Math.floor(seconds)
-    var minutes = Math.floor(total / 60)
-    var rest = total % 60
-    return minutes + ":" + (rest < 10 ? "0" : "") + rest
+  property var nextTrack: null
+
+  Process {
+    id: nextProc
+
+    command: ["cliamp", "plugins", "call", "next-track", "next"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.nextTrack = Model.parseNext(text)
+    }
   }
 
   // --- Spectre ---------------------------------------------------------------
-  // `cliamp visstream` emet un objet JSON par ligne. Les frames en erreur
-  // (`ok: false`) sont ignorees : c'est ce que renvoie cliamp lance en mode
-  // daemon, ou la visualisation n'est pas calculee. Le spectre reste alors
-  // vide et sa zone se replie.
+  // `cliamp visstream` emet un objet JSON par ligne. Les frames en erreur sont
+  // ignorees : c'est ce que renvoie cliamp lance en mode daemon, ou la
+  // visualisation n'est pas calculee. Le spectre reste alors vide et sa zone se
+  // replie.
 
   property var bands: []
   property string visualizerMode: ""
-
-  function parseBandFrame(line) {
-    if (!line) return
-
-    try {
-      var frame = JSON.parse(line)
-      if (!frame || !frame.ok) return
-      if (frame.bands) root.bands = frame.bands
-      if (frame.visualizer) root.visualizerMode = String(frame.visualizer)
-    } catch (e) {
-      // Ligne tronquee : la suivante arrivera dans 1/30 s.
-    }
-  }
 
   Process {
     id: bandStream
@@ -155,54 +326,33 @@ BarWidget {
     running: false
     stdout: SplitParser {
       splitMarker: "\n"
-      onRead: function(line) { root.parseBandFrame(line) }
+      onRead: function(line) {
+        var frame = Model.parseBandFrame(line)
+        if (!frame) return
+        if (frame.bands) root.bands = frame.bands
+        if (frame.visualizer) root.visualizerMode = frame.visualizer
+      }
+    }
+
+    // `visstream` doit vivre tant que cliamp vit. S'il rend la main, c'est un
+    // fait a connaitre : le spectre se fige sans autre signe exterieur.
+    onExited: function(exitCode) {
+      console.warn("local.menubar.cliamp: visstream s'est arrete, code", exitCode)
+      root.bands = []
     }
   }
 
-  // --- Presence du socket ----------------------------------------------------
-  // `visstream` parle au socket de cliamp, pas a MPRIS, et les deux ne vont pas
-  // toujours ensemble : une seconde instance de cliamp perd le nom MPRIS mais
-  // garde son socket, et un socket peut disparaitre sous une instance bien
-  // vivante. C'est donc le socket, et lui seul, qui conditionne le flux — sinon
-  // la relance forke `cliamp visstream` toutes les deux secondes dans le vide.
+  // Le flux tourne des que la connexion est etablie — pas des que le statut a
+  // fait son aller-retour. Les deux sont independants : le spectre n'a besoin
+  // de rien d'autre que d'un cliamp joignable, et le lier a l'analyse du statut
+  // le rendait otage d'un maillon qui ne le concerne pas.
+  //
+  // Une connexion reussie reste un bien meilleur test que l'ancien `test -S` :
+  // un socket laisse par un cliamp mort refuse la connexion.
+  readonly property bool spectrumWanted: ipc.connected
 
-  property bool socketPresent: false
-
-  Process {
-    id: socketProbe
-
-    command: ["test", "-S", Quickshell.env("HOME") + "/.config/cliamp/cliamp.sock"]
-    onExited: function(exitCode) { root.socketPresent = exitCode === 0 }
-  }
-
-  function probeSocket() {
-    if (!socketProbe.running) socketProbe.running = true
-  }
-
-  // Un socket ne se lit pas : FileView surveille le dossier qui le contient et
-  // on resonde a chaque mouvement.
-  FileView {
-    path: Quickshell.env("HOME") + "/.config/cliamp"
-    watchChanges: true
-    printErrors: false
-    onFileChanged: root.probeSocket()
-  }
-
-  // Filet, pour les cas ou la notification du dossier n'arrive pas.
-  Timer {
-    interval: 10000
-    running: true
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: root.probeSocket()
-  }
-
-  // Le flux tourne des que le socket est la : le spectre vit dans la barre, pas
-  // seulement dans le panneau.
-  readonly property bool bandStreamWanted: socketPresent
-
-  onBandStreamWantedChanged: {
-    if (bandStreamWanted) bandStream.running = true
+  onSpectrumWantedChanged: {
+    if (spectrumWanted) bandStream.running = true
     else {
       bandStream.running = false
       bands = []
@@ -211,22 +361,53 @@ BarWidget {
 
   Timer {
     interval: 2000
-    running: root.bandStreamWanted && !bandStream.running
+    running: root.spectrumWanted && !bandStream.running
     repeat: true
     onTriggered: bandStream.running = true
   }
 
   // --- Commandes -------------------------------------------------------------
-  // Le volume et le choix de station ne passent pas par MPRIS : on repasse par
-  // la CLI, qui parle au socket de cliamp.
+  // Une file, pas un verrou : l'ancien code refusait toute commande pendant
+  // qu'une autre tournait, et une molette un peu vive perdait ses crans en
+  // route. Ici rien ne se perd, tout attend son tour.
 
-  Process { id: commandProc }
+  property var commandQueue: []
+
+  Process {
+    id: commandProc
+
+    // Sans ceci, une commande qui echoue ne laisse aucune trace nulle part.
+    // C'est ce qui a masque un cliamp demarre sans IPC : chaque clic repondait
+    // « cliamp is not running » dans le vide, et le panneau restait muet.
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var message = String(text || "").trim()
+        if (message !== "") console.warn("local.menubar.cliamp:", message)
+      }
+    }
+
+    onExited: root.dequeueCommand()
+  }
 
   function runCommand(args) {
-    if (commandProc.running) return
+    // Plafond : si cliamp se fige, la file ne doit pas enfler sans fin. Trente
+    // deux commandes en attente, c'est deja bien au-dela de ce qu'un humain
+    // empile en cliquant.
+    if (commandQueue.length >= 32) return
 
-    commandProc.command = ["cliamp"].concat(args)
+    commandQueue = commandQueue.concat([args])
+    dequeueCommand()
+  }
+
+  function dequeueCommand() {
+    if (commandProc.running || commandQueue.length === 0) return
+
+    var next = commandQueue[0]
+    commandQueue = commandQueue.slice(1)
+    commandProc.command = ["cliamp"].concat(next)
     commandProc.running = true
+    refreshSoon.restart()
   }
 
   // Demarre cliamp sans lui ouvrir de fenetre.
@@ -253,163 +434,114 @@ BarWidget {
       launchPlayer()
       return
     }
-    player.togglePlaying()
+    if (hasMpris) player.togglePlaying()
+    else runCommand(["toggle"])
   }
 
-  // Volume en dB, borne comme cliamp lui-meme.
+  function goPrevious() {
+    if (hasMpris) player.previous()
+    else if (available) runCommand(["prev"])
+  }
+
+  function goNext() {
+    if (hasMpris) player.next()
+    else if (available) runCommand(["next"])
+  }
+
+  // `cliamp seek` prend une position absolue en secondes.
+  function seek(seconds) {
+    if (!seekable) return
+
+    var target = Math.max(0, Math.min(trackLength, seconds))
+    livePosition = target
+    runCommand(["seek", String(Math.round(target))])
+  }
+
+  // --- Volume ----------------------------------------------------------------
+  // En dB, borne comme cliamp lui-meme. On ne passe pas par MPRIS : son volume
+  // est une amplitude relative au maximum de cliamp — 1.0 y vaut +6 dB — et non
+  // une echelle en dB.
+  //
+  // Les crans de molette sont regroupes : l'affichage suit le doigt, mais un
+  // seul `cliamp volume` part une fois le geste retombe.
+
   readonly property real minVolumeDb: -30
   readonly property real maxVolumeDb: 6
   property real volumeDb: 0
+  property real pendingVolumeDb: NaN
+
+  Timer {
+    id: volumeFlush
+
+    interval: 80
+    repeat: false
+    onTriggered: root.flushVolume()
+  }
 
   function setVolume(db) {
     var clamped = Math.max(minVolumeDb, Math.min(maxVolumeDb, db))
     volumeDb = clamped
-    runCommand(["volume", String(Math.round(clamped))])
+    pendingVolumeDb = clamped
+    volumeFlush.restart()
   }
 
-  // --- Etat lu sur le socket -------------------------------------------------
-  // MPRIS ne dit rien du volume ni de la position dans la file : un `status`
-  // ponctuel comble le trou, uniquement panneau ouvert.
+  function flushVolume() {
+    if (isNaN(pendingVolumeDb)) return
 
-  property int queueIndex: -1
-  property int queueTotal: 0
-
-  Process {
-    id: statusProc
-
-    command: ["cliamp", "status"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.parseStatus(text)
-    }
-  }
-
-  function parseStatus(raw) {
-    // `cliamp status` sort du texte lisible ; on y pioche ce qui manque a MPRIS.
-    var lines = String(raw || "").split("\n")
-    for (var i = 0; i < lines.length; i++) {
-      var match = lines[i].match(/^Volume:\s*(-?[0-9.]+)/)
-      if (match) root.volumeDb = Number(match[1])
-    }
-  }
-
-  Timer {
-    interval: 2000
-    running: root.opened && root.available
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: if (!statusProc.running) statusProc.running = true
+    var target = pendingVolumeDb
+    pendingVolumeDb = NaN
+    runCommand(["volume", String(Math.round(target))])
   }
 
   // --- Favoris radio ---------------------------------------------------------
-  // `radio_favorites.toml` est un TOML minimal : des blocs [[station]] suivis
-  // de `cle = "valeur"`. Pas de parseur TOML en QML, mais ce sous-ensemble se
-  // lit sans risque.
 
   property var favorites: []
 
-  function parseFavorites(content) {
-    var stations = []
-    var current = null
-    var lines = String(content || "").split("\n")
-
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim()
-      if (line === "[[station]]") {
-        current = ({})
-        stations.push(current)
-        continue
-      }
-      if (!current || line === "" || line.charAt(0) === "#") continue
-
-      var match = line.match(/^([A-Za-z0-9_]+)\s*=\s*(.*)$/)
-      if (!match) continue
-
-      var value = match[2].trim()
-      // Retire les guillemets ; les nombres (bitrate) restent tels quels.
-      if (value.length >= 2 && value.charAt(0) === '"' && value.charAt(value.length - 1) === '"')
-        value = value.substring(1, value.length - 1)
-      current[match[1]] = value
-    }
-
-    // Une station sans URL n'est pas jouable : autant ne pas l'afficher.
-    favorites = stations.filter(function(station) { return !!station.url })
-  }
-
   FileView {
-    path: Quickshell.env("HOME") + "/.config/cliamp/radio_favorites.toml"
+    path: root.cliampDir + "/radio_favorites.toml"
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
-    onLoaded: root.parseFavorites(text())
+    onLoaded: root.favorites = Model.parseFavorites(text())
     onLoadFailed: root.favorites = []
   }
 
-  // Jouer une station demande deux temps : `queue` l'ajoute en fin de file,
-  // puis il faut avancer jusqu'a elle — cliamp n'expose aucune commande pour
-  // sauter directement a un index. Le nombre de sauts est connu : la piste
-  // ajoutee est la derniere, donc `total - 1 - index` crans plus loin.
+  // Jouer une station demande un saut a un index de la file, que la CLI de
+  // cliamp n'expose pas : elle sait empiler et avancer d'un cran, rien de plus.
+  // L'ancien code empilait puis enchainait N `cliamp next` dans un sous-shell.
+  //
+  // `cliamp.queue.jump(index)` existe en revanche cote Lua, d'ou le plugin
+  // omarchy-radio.lua qui fait le saut en une fois — et qui reutilise l'entree
+  // deja presente au lieu d'empiler un doublon a chaque clic.
+  //
+  // Cliquer une station alors que cliamp n'est pas la ne doit pas rester sans
+  // effet : les favoris s'affichent depuis le TOML, donc le panneau a l'air
+  // vivant meme lecteur eteint, et le clic partait dans le vide. On demarre
+  // alors cliamp et on garde la station sous le coude jusqu'a ce que le socket
+  // reponde.
   property string pendingStationUrl: ""
 
   function playStation(station) {
-    if (!station || !station.url || commandProc.running) return
+    if (!station || !station.url) return
 
-    pendingStationUrl = String(station.url)
-    queueProc.command = ["cliamp", "queue", pendingStationUrl]
-    queueProc.running = true
-  }
+    var url = String(station.url)
 
-  Process {
-    id: queueProc
-
-    onExited: function(exitCode) {
-      if (exitCode !== 0) {
-        root.pendingStationUrl = ""
-        return
-      }
-      jumpStatusProc.running = true
-    }
-  }
-
-  // Relit la file juste apres l'ajout pour savoir de combien avancer.
-  Process {
-    id: jumpStatusProc
-
-    command: ["bash", "-c",
-              "printf '%s\\n' '{\"cmd\":\"status\"}' | socat - UNIX-CONNECT:\"$HOME/.config/cliamp/cliamp.sock\""]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.jumpToQueued(text)
-    }
-  }
-
-  function jumpToQueued(raw) {
-    if (!pendingStationUrl) return
-
-    var index = 0
-    var total = 0
-    try {
-      var status = JSON.parse(String(raw || "{}"))
-      index = Number(status.index || 0)
-      total = Number(status.total || 0)
-    } catch (e) {
-      pendingStationUrl = ""
+    // On n'attend pas notre propre socket : `cliamp plugins call` ouvre sa
+    // connexion a lui. Le conditionner a `socketPresent` imposait un premier
+    // clic pour rien, le temps qu'un aller-retour de statut aboutisse.
+    if (available || ipc.connected) {
+      sendStation(url)
       return
     }
 
-    var steps = total - 1 - index
-    pendingStationUrl = ""
-    if (steps <= 0) return
-
-    // Les sauts partent d'un coup : enchaines sans pause, cliamp n'a pas le
-    // temps de mettre en tampon les stations traversees.
-    var script = ""
-    for (var i = 0; i < steps; i++) script += "cliamp next >/dev/null 2>&1; "
-    jumpProc.command = ["bash", "-c", script]
-    jumpProc.running = true
+    // Cliamp vraiment absent : on le demarre et la station attend son arrivee.
+    pendingStationUrl = url
+    launchPlayer()
   }
 
-  Process { id: jumpProc }
+  function sendStation(url) {
+    runCommand(["plugins", "call", "omarchy-radio", "station", url])
+  }
 
   // --- Ouverture -------------------------------------------------------------
 
@@ -417,6 +549,8 @@ BarWidget {
 
   function open() {
     opened = true
+    requestStatus()
+    if (socketPresent && !nextProc.running) nextProc.running = true
   }
 
   function close() {
@@ -458,6 +592,8 @@ BarWidget {
   readonly property string glyphPrevious: "󰒮"
   readonly property string glyphNext: "󰒭"
   readonly property string glyphRadio: "󰐹"
+  readonly property string glyphShuffle: "󰒟"
+  readonly property string glyphRepeat: "󰑖"
 
   // --- Bouton de barre -------------------------------------------------------
 
@@ -722,6 +858,17 @@ BarWidget {
                   elide: Text.ElideRight
                   width: parent.width
                 }
+
+                // L'album ne vient que du statut : MPRIS ne le publie pas.
+                Text {
+                  text: root.trackAlbum
+                  visible: text !== ""
+                  color: root.mutedColor
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                  width: parent.width
+                }
               }
             }
 
@@ -759,7 +906,7 @@ BarWidget {
                       color: root.accentColor
                       opacity: 0.85
 
-                      // Sans lissage, le spectre scintille a 30 images/s.
+                      // Sans lissage, le spectre scintille a 20 images/s.
                       Behavior on height {
                         NumberAnimation { duration: 90; easing.type: Easing.OutQuad }
                       }
@@ -770,14 +917,17 @@ BarWidget {
             }
 
             // Progression, seulement quand la piste a une duree : un flux radio
-            // n'en a pas.
+            // n'en a pas. La barre est cliquable — la zone sensible fait toute
+            // la hauteur de la ligne, pas les quatre pixels du trait.
             Item {
               width: parent.width
               implicitHeight: Style.space(16)
-              visible: root.trackLength > 0
+              visible: root.seekable
 
               Text {
-                text: root.formatTime(root.livePosition) + " / " + root.formatTime(root.trackLength)
+                id: positionLabel
+
+                text: Model.formatTime(root.livePosition) + " / " + Model.formatTime(root.trackLength)
                 color: root.mutedColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -785,20 +935,80 @@ BarWidget {
                 anchors.verticalCenter: parent.verticalCenter
               }
 
-              Rectangle {
+              Item {
+                id: seekArea
+
                 width: parent.width - Style.space(80)
-                height: Math.max(3, Style.space(4))
-                radius: height / 2
-                color: root.bar ? Style.selectedFillFor(root.bar.foreground, Color.accent) : Color.muted
+                height: parent.height
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
 
                 Rectangle {
-                  width: parent.width * (root.trackLength > 0 ? Math.min(1, root.livePosition / root.trackLength) : 0)
-                  height: parent.height
-                  radius: parent.radius
-                  color: root.accentColor
+                  id: seekTrack
+
+                  width: parent.width
+                  height: Math.max(3, Style.space(4))
+                  radius: height / 2
+                  color: root.bar ? Style.selectedFillFor(root.bar.foreground, Color.accent) : Color.muted
+                  anchors.verticalCenter: parent.verticalCenter
+
+                  Rectangle {
+                    width: parent.width * (root.trackLength > 0
+                      ? Math.min(1, root.livePosition / root.trackLength)
+                      : 0)
+                    height: parent.height
+                    radius: parent.radius
+                    color: root.accentColor
+                  }
                 }
+
+                // Repere au survol : sans lui, rien ne dit que le trait se
+                // clique.
+                Rectangle {
+                  width: Style.space(3)
+                  height: seekTrack.height * 2.5
+                  radius: width / 2
+                  color: root.accentColor
+                  visible: seekHover.hovered
+                  x: Math.max(0, Math.min(seekArea.width - width, seekHover.point.position.x - width / 2))
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+
+                HoverHandler { id: seekHover }
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: function(mouse) {
+                    var ratio = Math.max(0, Math.min(1, mouse.x / width))
+                    root.seek(ratio * root.trackLength)
+                  }
+                }
+              }
+            }
+
+            // ---- A suivre ----
+            // Absente en lecture aleatoire, en fin de file, et quand le plugin
+            // next-track n'est pas installe ou pas approuve.
+            Item {
+              width: parent.width
+              implicitHeight: nextLabel.implicitHeight
+              visible: root.nextTrack !== null
+
+              Text {
+                id: nextLabel
+
+                text: root.nextTrack
+                  ? "UP NEXT · " + (root.nextTrack.artist
+                      ? root.nextTrack.artist + " — " + root.nextTrack.title
+                      : root.nextTrack.title)
+                  : ""
+                color: root.mutedColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.letterSpacing: 0.6
+                elide: Text.ElideRight
+                width: parent.width
               }
             }
           }
@@ -818,22 +1028,22 @@ BarWidget {
 
               TransportButton {
                 glyph: root.glyphPrevious
-                actionEnabled: root.available && root.player.canGoPrevious
-                onActivated: if (root.available) root.player.previous()
+                actionEnabled: root.hasMpris ? root.player.canGoPrevious : root.available
+                onActivated: root.goPrevious()
               }
 
               TransportButton {
                 glyph: root.playing ? root.glyphPause : root.glyphPlay
                 highlighted: true
                 // Toujours actif : sans cliamp, ce bouton le demarre.
-                actionEnabled: !root.available || root.player.canTogglePlaying
+                actionEnabled: !root.hasMpris || root.player.canTogglePlaying
                 onActivated: root.primaryAction()
               }
 
               TransportButton {
                 glyph: root.glyphNext
-                actionEnabled: root.available && root.player.canGoNext
-                onActivated: if (root.available) root.player.next()
+                actionEnabled: root.hasMpris ? root.player.canGoNext : root.available
+                onActivated: root.goNext()
               }
             }
 
@@ -850,6 +1060,36 @@ BarWidget {
               integer: true
               value: root.volumeDb
               onMoved: function(value) { root.setVolume(value) }
+            }
+
+            // Modes de lecture : le statut les connait, MPRIS non. Purement
+            // indicatif — ils se changent depuis cliamp.
+            Item {
+              width: parent.width
+              implicitHeight: modesLabel.implicitHeight
+              visible: root.socketPresent && (root.playerStatus.shuffle
+                || String(root.playerStatus.repeatMode).toLowerCase() !== "off"
+                || root.playerStatus.total > 0)
+
+              Text {
+                id: modesLabel
+
+                text: {
+                  var parts = []
+                  if (root.playerStatus.shuffle) parts.push(root.glyphShuffle + " SHUFFLE")
+                  var mode = String(root.playerStatus.repeatMode)
+                  if (mode.toLowerCase() !== "off") parts.push(root.glyphRepeat + " " + mode.toUpperCase())
+                  if (root.playerStatus.total > 0 && root.playerStatus.index >= 0)
+                    parts.push((root.playerStatus.index + 1) + " / " + root.playerStatus.total)
+                  return parts.join("   ")
+                }
+                color: root.mutedColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.letterSpacing: 0.6
+                elide: Text.ElideRight
+                width: parent.width
+              }
             }
           }
 
@@ -978,7 +1218,7 @@ BarWidget {
     // flux et non celui du favori.
     readonly property bool isCurrent: root.available
       && String(station.url || "") !== ""
-      && String(root.player.metadata ? (root.player.metadata["xesam:url"] || "") : "") === String(station.url)
+      && String(root.streamUrl) === String(station.url)
 
     width: parent.width
     height: Style.space(30)
@@ -1026,12 +1266,7 @@ BarWidget {
       }
 
       Text {
-        text: {
-          var parts = []
-          if (stationRow.station.codec) parts.push(String(stationRow.station.codec))
-          if (stationRow.station.bitrate) parts.push(String(stationRow.station.bitrate) + " kb/s")
-          return parts.join(" · ")
-        }
+        text: Model.stationSubtitle(stationRow.station)
         visible: text !== ""
         color: root.mutedColor
         font.family: root.fontFamily
