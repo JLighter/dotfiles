@@ -53,6 +53,21 @@ Item {
   // Injecte par le chargeur de services d'omarchy-shell.
   property var shell: null
 
+  // --- Archive ---------------------------------------------------------------
+  //
+  // L'historique persistant, monte ici plutot que dans le widget de barre : ce
+  // service est instancie une seule fois pour tout le shell, la ou la barre l'est
+  // une fois par ecran. Le widget le rejoint par
+  // `shell.serviceFor("local.notifications").archive`.
+  //
+  // Il ne lit pas ce qu'on draine ci-dessous : une notification recue en « ne pas
+  // deranger » n'atteint jamais `popupModel`, elle va directement sur le disque.
+  // L'archive suit donc les fichiers du service natif, pas son modele. Voir
+  // l'en-tete d'Archive.qml.
+  readonly property alias archive: archiveStore
+
+  Archive { id: archiveStore }
+
   readonly property var nativeService: shell && typeof shell.firstPartyServiceFor === "function"
     ? shell.firstPartyServiceFor("omarchy.notifications")
     : null

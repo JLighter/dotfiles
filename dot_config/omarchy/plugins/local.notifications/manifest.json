@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "local.notifications",
-  "name": "Notification toasts",
-  "version": "1.0.0",
+  "name": "Notifications",
+  "version": "2.0.0",
   "author": "jlighter",
   "license": "MIT",
-  "description": "Rend les toasts de omarchy.notifications aux couleurs de local.menubar",
+  "description": "Toasts aux couleurs de local.menubar, et l'archive persistante que la cloche de la barre relit",
   "kinds": [
     "service"
   ],

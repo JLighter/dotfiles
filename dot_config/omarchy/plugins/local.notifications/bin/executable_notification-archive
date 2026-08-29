@@ -1,0 +1,661 @@
+#!/usr/bin/env bash
+#
+# Le magasin derriere le centre de notifications.
+#
+# Le service natif ecrit deja chaque notification sur disque : un JSON par popup
+# sous ~/.local/state/omarchy/notifications/, deplace dans history/ quand le
+# toast quitte l'ecran. Ce n'est pas un historique relisable pour autant — il
+# garde dix fichiers, supprime le onzieme, et supprime avec lui l'image qu'il
+# conservait pour celui-la. Dix, c'est le bon compte pour un service dont le
+# metier est de rejouer les toasts qu'on vient de manquer ; c'est tres loin du
+# compte pour repondre a « c'etait quoi, deja ».
+#
+# Ce script recopie donc chaque fichier des qu'il apparait, dans une archive
+# gardee aussi longtemps qu'on l'a demande, icone comprise. Rien ici n'ecrit
+# dans les repertoires du service : on les lit, et on s'ecarte.
+#
+# Pourquoi le disque plutot que le modele QML : `local.notifications` intercepte
+# deja `popupModel` pour peindre ses propres toasts, et on aurait pu archiver de
+# la. Mais une notification recue en mode « ne pas deranger » n'entre jamais
+# dans `popupModel` — `handleNotification()` appelle `writeSilenced()` puis
+# retourne. Archiver depuis le modele perdrait donc precisement ce qu'on veut
+# retrouver : ce qui est arrive pendant qu'on avait coupe le son.
+#
+# Chaque sous-commande imprime du JSON, un objet ou un tableau, y compris quand
+# elle echoue — pour que rien de ce qui rate n'atteigne le panneau sous la forme
+# d'une erreur de parsing.
+
+set -uo pipefail
+
+# Tout ce qui s'ecrit ici est le releve de ce qu'on a recu, donc rien de ce qui
+# est cree n'est lisible par un autre compte de la machine. Pose une fois ici
+# plutot que fichier par fichier, parce que celui qu'on oublie est celui qui
+# comptait. Le natif, lui, ecrit son historique en 644.
+umask 077
+
+state_home=${XDG_STATE_HOME:-$HOME/.local/state}
+
+# La ou le service depose ce qu'il a recu. Les toasts vivants dans le premier,
+# tout ce qui a quitte l'ecran dans le second.
+# Surchargeable pour pouvoir pointer l'ensemble sur un repertoire d'essai et le
+# piloter a la main — seul moyen d'exercer le watcher sans attendre de vraies
+# notifications.
+src_dir=${NA_SRC_DIR:-$state_home/omarchy/notifications}
+src_history=${NA_SRC_HISTORY:-$src_dir/history}
+
+# Le notre.
+store=${NA_STORE:-$state_home/omarchy-notifications-archive}
+archive="$store/archive.jsonl"
+images="$store/images"
+seen_file="$store/seen"
+lock_file="$store/lock"
+dismissed_file="$store/dismissed"
+cleared_at_file="$store/cleared_at"
+
+# Ce qui est garde. Les deux sont des plafonds et le plus serre gagne : trente
+# jours d'une semaine calme font une liste plus courte que mille notifications,
+# et mille notifications d'une journee bruyante font une liste plus courte que
+# trente jours.
+keep_days=${NA_KEEP_DAYS:-30}
+max_items=${NA_MAX_ITEMS:-1000}
+# Garder ou non une copie de l'image vers laquelle pointe une notification.
+# « Non » est le reglage de qui prefere une archive de mots seuls, et il veut
+# dire aucune copie faite plutot qu'une copie jamais montree.
+previews=${NA_PREVIEWS:-1}
+
+die() {
+  printf '{"ok":false,"error":%s}\n' "$(printf '%s' "$1" | jq -Rs .)"
+  exit 1
+}
+
+command -v jq >/dev/null 2>&1 || die "jq n'est pas installe"
+
+# Un seul ecrivain a la fois, le temps d'une commande. L'archive appartient au
+# plugin `service`, instancie une seule fois pour tout le shell : il n'y a donc
+# pas deux watchers a se disputer le fichier comme il y en aurait un par ecran
+# dans un widget de barre. Le verrou reste necessaire pour les autres verbes —
+# `remove`, `clear` et `seed` sont des process separes qui peuvent tomber au
+# milieu d'un `ingest` du watcher, et un append entrelace ecrit une demi-ligne.
+#
+# Le verrou est pris dans un sous-shell et non sur ce shell-ci, parce que
+# `watch` vit toute la session : un descripteur tenu ouvert la-bas verrouillerait
+# toutes les autres invocations pour le reste de la journee.
+with_lock() {
+  ( exec 9>"$lock_file"; flock 9; "$@" )
+}
+
+ensure_store() {
+  mkdir -p "$store" "$images" || die "impossible de creer $store"
+  [[ -f $archive ]] || : > "$archive"
+  [[ -f $dismissed_file ]] || : > "$dismissed_file"
+  # Une installation anterieure a l'umask ci-dessus aurait cree tout ca en
+  # 755/644, ce qui livre a la lecture d'un second compte l'integralite de ce
+  # qu'on a recu. Assez peu couteux pour etre reaffirme a chaque appel.
+  chmod 700 "$store" "$images" 2>/dev/null || true
+  chmod 600 "$archive" "$dismissed_file" "$seen_file" "$cleared_at_file" 2>/dev/null || true
+}
+
+now_ms() { printf '%s' "$(($(date +%s%N) / 1000000))"; }
+
+# ---------------------------------------------------------------- ingestion
+
+# Une entree supprimee a la main ne doit pas revenir. Elle reviendrait pourtant :
+# le fichier source est encore la, ou y retombe au passage popup -> history, et
+# la prochaine synchro le relit. D'ou deux pierres tombales — une liste de cles
+# ecartees, et un horodatage de purge qui condamne tout ce qui lui est anterieur.
+is_dismissed() {
+  local key=$1
+  [[ -n $key ]] || return 1
+  if [[ -s $dismissed_file ]] && grep -qxF "$key" "$dismissed_file" 2>/dev/null; then
+    return 0
+  fi
+  if [[ -s $cleared_at_file ]]; then
+    local cleared_at stamp
+    cleared_at=$(cat "$cleared_at_file" 2>/dev/null || echo 0)
+    if [[ $cleared_at =~ ^[0-9]+$ ]] && (( cleared_at > 0 )); then
+      stamp=${key%%-*}
+      if [[ $stamp =~ ^[0-9]+$ ]] && (( stamp <= cleared_at )); then
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+# Si cette notification est deja dans l'archive. Les cles sont les noms de
+# fichier du service lui-meme (« 1787992440075-3 ») : un horodatage en
+# millisecondes et l'identifiant de la notification. C'est
+# `NotificationLogic.imageStem()` en amont, et c'est stable de part et d'autre du
+# deplacement de popup/ vers history/. C'est ce qui rend inoffensif d'attraper
+# deux fois le meme fichier, et il faut que ca le soit : un popup est attrape une
+# premiere fois pendant qu'il est a l'ecran, une seconde quand il est archive.
+have_key() {
+  grep -qF "\"key\":\"$1\"" "$archive" 2>/dev/null
+}
+
+# Un chemin d'icone qui vaut la peine d'etre recopie : quelque chose sur le
+# disque, par opposition a un nom d'icone de theme (« slack »,
+# « org.mozilla.firefox ») qui se resout au rendu et n'a besoin de rien de garde.
+is_path() {
+  case $1 in
+    file:///*|/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Recopie une des images du service dans notre magasin, et repond par le chemin
+# de la copie. Les originaux vivent et meurent avec les dix fichiers que le
+# service garde, donc une entree qui pointerait encore dessus perdrait son visage
+# dans l'heure.
+copy_image() {
+  local src=$1 key=$2 slot=$3 dest
+  src=${src#file://}
+  [[ -f $src ]] || { printf '%s' ""; return; }
+  dest="$images/$key-$slot"
+  # Borne, parce que ce sont des fichiers ecrits par un autre programme et qu'un
+  # panneau doit survivre a l'un d'eux qui serait enorme.
+  if timeout 5 head -c 5242881 -- "$src" > "$dest.tmp" 2>/dev/null &&
+     (( $(stat -c%s -- "$dest.tmp" 2>/dev/null || echo 0) <= 5242880 )); then
+    # Seules de vraies images sont gardees. Ces chemins arrivent sur la
+    # notification, c'est-a-dire de celui qui l'a envoyee, et une icone « a »
+    # ~/.ssh/id_rsa ne doit pas devenir discretement une seconde copie de la cle.
+    if command -v file >/dev/null 2>&1; then
+      case "$(file -bL --mime-type -- "$dest.tmp" 2>/dev/null)" in
+        image/*) ;;
+        *) rm -f -- "$dest.tmp"; printf '%s' ""; return ;;
+      esac
+    fi
+    # Un apercu est garde a la taille a laquelle il sera montre, pas a celle a
+    # laquelle l'appareil l'a pris. Un mois d'alertes de mouvement a 175 ko piece
+    # fait un magasin que personne n'a demande ; a la largeur du panneau ils en
+    # font le cinquieme, et l'original est toujours la ou il a toujours ete.
+    if [[ $slot == preview ]] && command -v magick >/dev/null 2>&1; then
+      magick "$dest.tmp" -auto-orient -resize '720x720>' -quality 82 "$dest.resized" 2>/dev/null \
+        && mv -f -- "$dest.resized" "$dest.tmp"
+      rm -f -- "$dest.resized"
+    fi
+    mv -f -- "$dest.tmp" "$dest"
+    printf 'file://%s' "$dest"
+  else
+    rm -f -- "$dest.tmp"
+    printf '%s' ""
+  fi
+}
+
+# L'image dont une notification *parle*, par opposition a l'icone de ce qui l'a
+# envoyee. Les applications qui photographient quelque chose (une camera qui
+# capte un mouvement, un outil de capture d'ecran) ne posent en general aucun
+# hint d'image : elles passent le fichier a l'action, pour qu'un clic sur le
+# toast l'ouvre. Ce chemin est le seul endroit ou l'image est nommee.
+#
+# C'est aussi la liste blanche de ce qu'un clic sur une notification archivee a
+# le droit d'ouvrir, et la raison pour laquelle elle est aussi etroite. L'action
+# dont une notification est porteuse est choisie par celui qui l'envoie, et
+# n'importe quel process du bus de session peut en envoyer une — le commentaire
+# de `NotificationLogic.parseExecArgv()` le dit sans detour : « equivalent to
+# same-uid code execution ». Garder cette commande pour la lancer plus tard,
+# c'est deposer la commande d'un attaquant en attente d'un clic. Elle n'est donc
+# jamais gardee. Ce qui l'est, c'est au plus un chemin absolu vers une image,
+# extrait de l'action et ouvert par argument plutot que par un shell.
+#
+# Deux formes arrivent ici. Omarchy envoie desormais l'action comme
+# `omarchy-exec-argv`, un vecteur JSON dont les elements sont deja des arguments
+# distincts : un candidat est un element entier, et une espace dans un nom de
+# fichier n'est qu'une espace. Les anciens toasts, et tout ce qui traine dans
+# l'archive d'avant, portent `omarchy-exec` : une seule chaine shell, ou une
+# espace est un separateur et ou un chemin qui en contient une ne se distingue
+# pas de deux arguments. D'ou une branche chaine qui refuse les espaces et une
+# branche vecteur qui les accepte.
+#
+# Dans les deux cas : absolu, ni guillemets ni retours ligne, et une extension
+# d'image. Un chemin qui survit a ca ne peut pas devenir une option, une seconde
+# commande, ni un .desktop qui s'execute a l'ouverture.
+preview_source() {
+  local action=$1
+
+  if [[ $action == \[* ]]; then
+    printf '%s' "$action" | jq -r --arg re '^(file://)?/[^"'"'"'\r\n]*\.(jpe?g|png|webp|gif)$' '
+      if type == "array" then
+        .[] | select(type == "string") | select(test($re; "i"))
+      else empty end
+    ' 2>/dev/null | head -n 1
+    return
+  fi
+
+  printf '%s' "$action" | grep -oiE "(file://)?/[^\"' ]*\.(jpe?g|png|webp|gif)" | head -n 1
+}
+
+# Fait entrer un des fichiers JSON du service dans l'archive, et imprime
+# l'entree ajoutee.
+ingest_file() {
+  local file=$1
+  local key entry app_icon image_src exec_src icon_copy image_copy file_src preview_copy
+  key=$(basename -- "$file"); key=${key%.json}
+  [[ -n $key ]] || return 0
+  is_dismissed "$key" && return 0
+  have_key "$key" && return 0
+  [[ -s $file ]] || return 0
+
+  # Un fichier attrape en pleine ecriture ne parse rien ; il sera repris au
+  # deplacement vers history/, ou par la prochaine synchro.
+  jq -e . "$file" >/dev/null 2>&1 || return 0
+
+  # Meme condamnation que `is_dismissed`, mais sur l'horodatage interne : une
+  # notification arrivee avant la purge dont la cle serait illisible.
+  if [[ -s $cleared_at_file ]]; then
+    local cleared_at file_stamp
+    cleared_at=$(cat "$cleared_at_file" 2>/dev/null || echo 0)
+    if [[ $cleared_at =~ ^[0-9]+$ ]] && (( cleared_at > 0 )); then
+      file_stamp=$(jq -r '(.timestamp // 0) | floor' "$file" 2>/dev/null || echo 0)
+      if [[ $file_stamp =~ ^[0-9]+$ ]] && (( file_stamp > 0 && file_stamp <= cleared_at )); then
+        return 0
+      fi
+    fi
+  fi
+
+  app_icon=$(jq -r '.appIcon // ""' "$file")
+  image_src=$(jq -r '.image // ""' "$file")
+  # execArgv est ce que le service ecrit aujourd'hui, exec ce qu'il ecrivait avant.
+  exec_src=$(jq -r '.execArgv // .exec // ""' "$file")
+
+  icon_copy=$app_icon
+  image_copy=$image_src
+  is_path "$app_icon" && icon_copy=$(copy_image "$app_icon" "$key" "appIcon")
+  is_path "$image_src" && image_copy=$(copy_image "$image_src" "$key" "image")
+
+  # Le chemin vers lequel pointait l'action, si elle pointait vers une image.
+  # C'est ce qu'un clic ouvre ; la commande d'ou il sort est jetee ici et
+  # n'atteint jamais l'archive.
+  file_src=$(preview_source "$exec_src")
+  file_src=${file_src#file://}
+
+  preview_copy=""
+  if (( previews )) && [[ -n $file_src ]]; then
+    preview_copy=$(copy_image "$file_src" "$key" "preview")
+  fi
+
+  entry=$(jq -c \
+    --arg key "$key" \
+    --arg appIcon "$icon_copy" \
+    --arg image "$image_copy" \
+    --arg preview "$preview_copy" \
+    --arg file "$file_src" \
+    '{
+       key: $key,
+       app: (.app // ""),
+       appIcon: $appIcon,
+       summary: (.summary // ""),
+       body: (.body // ""),
+       image: $image,
+       preview: $preview,
+       file: $file,
+       glyph: (.glyph // ""),
+       urgency: (.urgency // 1),
+       timestamp: (.timestamp // 0)
+     }
+     | .timestamp = (if .timestamp > 0 then .timestamp
+                     else ((.key | split("-")[0] | tonumber?) // 0) end)' \
+    "$file" 2>/dev/null) || return 0
+  [[ -n $entry ]] || return 0
+
+  printf '%s\n' "$entry" >> "$archive"
+  printf '%s\n' "$entry"
+}
+
+# Tout ce que le service detient, du plus ancien au plus recent, pour que
+# l'archive reste dans l'ordre ou les choses se sont produites. Les popups
+# vivants sont lus apres l'historique : une notification qui est a l'ecran a
+# l'instant est plus recente que celles qui l'ont quitte.
+sync_all() {
+  local file
+  for file in "$src_history"/*.json "$src_dir"/*.json; do
+    [[ -e $file ]] || continue
+    ingest_file "$file"
+  done
+}
+
+# ---------------------------------------------------------------- retention
+
+# Laisse tomber ce qui depasse l'un des deux plafonds, et emporte les images des
+# entrees tombees. Tourne apres une ingestion plutot que sur minuterie : la seule
+# chose qui puisse pousser l'archive au-dela d'une limite, c'est un ajout.
+prune() {
+  local cutoff kept dropped
+  cutoff=$(( $(now_ms) - keep_days * 86400000 ))
+
+  # Une pierre tombale plus vieille que la fenetre de retention ne protege plus
+  # rien : ce qu'elle condamnait est de toute facon hors de l'archive.
+  if [[ -s $cleared_at_file ]]; then
+    local cleared_at
+    cleared_at=$(cat "$cleared_at_file" 2>/dev/null || echo 0)
+    if [[ $cleared_at =~ ^[0-9]+$ ]] && (( cleared_at < cutoff )); then
+      rm -f -- "$cleared_at_file"
+    fi
+  fi
+
+  if [[ -s $dismissed_file ]]; then
+    tail -n 2000 "$dismissed_file" > "$dismissed_file.tmp" 2>/dev/null && mv -f "$dismissed_file.tmp" "$dismissed_file"
+  fi
+
+  [[ -s $archive ]] || return 0
+
+  kept=$(jq -c --argjson cutoff "$cutoff" 'select(.timestamp >= $cutoff)' "$archive" 2>/dev/null | tail -n "$max_items")
+  dropped=$(comm -23 \
+    <(jq -r '.key' "$archive" 2>/dev/null | sort) \
+    <(printf '%s\n' "$kept" | jq -r 'select(.key) | .key' 2>/dev/null | sort))
+
+  printf '%s\n' "$kept" | grep -v '^$' > "$archive.tmp" 2>/dev/null || : > "$archive.tmp"
+  mv -f "$archive.tmp" "$archive"
+
+  local key
+  while IFS= read -r key; do
+    [[ -n $key ]] || continue
+    rm -f -- "$images/$key-appIcon" "$images/$key-image" "$images/$key-preview"
+  done <<< "$dropped"
+}
+
+# ---------------------------------------------------------------- commandes
+
+# `sync` en ligne de commande ne rend qu'une ligne, comme tout le reste ici ; les
+# entrees qu'il a avalees n'interessent que `watch`, qui les diffuse au panneau.
+quiet=0
+
+sync_and_prune() {
+  if (( quiet )); then
+    sync_all >/dev/null
+  else
+    sync_all
+  fi
+  prune
+}
+
+# Une archive ecrite avant que les actions cessent d'etre stockees en detient
+# encore. C'est la commande d'un attaquant, dans un fichier, en attente d'un
+# clic : pas quelque chose a laisser jusqu'a ce que quelqu'un pense a lancer une
+# migration. Chaque synchro la retire, et une fois retiree le grep ne coute rien.
+disarm_archive() {
+  grep -q '"exec":' "$archive" 2>/dev/null || return 0
+  backfill_previews >/dev/null
+}
+
+cmd_sync() {
+  ensure_store
+  with_lock disarm_archive
+  with_lock sync_and_prune
+}
+
+cmd_watch() {
+  ensure_store
+  mkdir -p "$src_dir" "$src_history"
+  # Rattraper d'abord : le shell etait eteint, ou c'est le premier lancement, et
+  # ce qui est arrive entre-temps traine encore dans ces repertoires.
+  quiet=1
+  cmd_sync
+
+  command -v inotifywait >/dev/null 2>&1 || die "inotifywait n'est pas installe"
+
+  # close_write attrape un popup en train d'etre ecrit, moved_to l'attrape en
+  # train d'etre archive. La meme notification arrive deux fois par ce biais, et
+  # la seconde est ecartee par le test de cle — moins couteux que d'essayer
+  # d'etre malin sur celui des deux evenements qu'il faut ecouter.
+  #
+  # Lecture par descripteur plutot que par pipeline, pour que le watcher ait un
+  # pid que ce script puisse tuer. Branche dans un `while` par un tube, il serait
+  # orphelin a chaque rechargement des plugins du shell, et une journee de
+  # rechargements fait une journee d'inotifywait a l'abandon.
+  exec 3< <(inotifywait -m -q -e close_write -e moved_to --format '%w%f' \
+    "$src_dir" "$src_history" 2>/dev/null)
+  watcher=$!
+  trap 'kill "$watcher" 2>/dev/null' EXIT INT TERM
+
+  while IFS= read -r file <&3; do
+    [[ $file == *.json ]] || continue
+    with_lock ingest_one "$file"
+  done
+}
+
+ingest_one() {
+  ingest_file "$1"
+  prune
+}
+
+cmd_list() {
+  ensure_store
+  local limit=${1:-200}
+  # Du plus recent au plus ancien, parce que c'est l'ordre dans lequel on lit.
+  tail -n "$limit" "$archive" 2>/dev/null | tac | jq -s '.' 2>/dev/null || printf '[]\n'
+}
+
+remove_key() {
+  local key=$1
+  [[ -n $key ]] || return 0
+  printf '%s\n' "$key" >> "$dismissed_file"
+  grep -vF "\"key\":\"$key\"" "$archive" > "$archive.tmp" 2>/dev/null || : > "$archive.tmp"
+  mv -f "$archive.tmp" "$archive"
+  rm -f -- "$images/$key-appIcon" "$images/$key-image" "$images/$key-preview"
+  # Les deux repertoires, pas seulement history/ : une notification ecartee
+  # pendant que son toast est encore a l'ecran est posee dans le repertoire des
+  # popups, et l'y laisser fait que le deplacement vers history/ la reingere un
+  # instant plus tard.
+  rm -f -- "$src_history/$key.json" "$src_dir/$key.json"
+}
+
+cmd_remove() {
+  ensure_store
+  local key=$1
+  [[ -n $key ]] || die "remove attend une cle"
+  with_lock remove_key "$key"
+  printf '{"ok":true,"removed":%s}\n' "$(printf '%s' "$key" | jq -Rs .)"
+}
+
+clear_all() {
+  now_ms > "$cleared_at_file"
+  : > "$archive"
+  : > "$dismissed_file"
+  rm -f -- "$images"/*
+  local f
+  for f in "$src_history"/*.json; do
+    [[ -e $f ]] || continue
+    rm -f -- "$f"
+  done
+}
+
+cmd_clear() {
+  ensure_store
+  with_lock clear_all
+  printf '{"ok":true,"cleared":true}\n'
+}
+
+# Quand le centre a ete ouvert pour la derniere fois. Tout ce qui est plus
+# recent est ce que la barre signale comme non lu, et c'est un fichier plutot
+# qu'un etat en memoire parce que « non lu » doit survivre a un redemarrage du
+# shell pour vouloir dire quelque chose.
+cmd_seen() {
+  ensure_store
+  if [[ $# -gt 0 && -n ${1:-} ]]; then
+    printf '%s\n' "$1" > "$seen_file"
+    printf '{"ok":true,"seen":%s}\n' "$1"
+    return
+  fi
+  printf '{"ok":true,"seen":%s}\n' "$(cat "$seen_file" 2>/dev/null || echo 0)"
+}
+
+cmd_unread() {
+  ensure_store
+  local seen
+  seen=$(cat "$seen_file" 2>/dev/null || echo 0)
+  printf '{"ok":true,"unread":%s}\n' \
+    "$(jq -s --argjson seen "${seen:-0}" '[.[] | select(.timestamp > $seen)] | length' "$archive" 2>/dev/null || echo 0)"
+}
+
+# ---------------------------------------------------------------- outillage
+
+# Remplit l'archive d'un trafic plausible, pour travailler le panneau sans
+# attendre une semaine de vraies notifications, et pour prendre une capture
+# d'ecran qui ne livre les messages de personne.
+#
+# Les entrees sont etalees sur trois jours pour que les en-tetes de journee aient
+# quelque chose a coiffer, et elles nomment de vraies applications avec de vrais
+# noms d'icone, pour que les icones se resolvent depuis le theme comme elles le
+# font pour de vrai.
+cmd_seed() {
+  ensure_store
+  rm -f -- "$cleared_at_file"
+  : > "$dismissed_file"
+  with_lock seed_entries "${1:-25}"
+  printf '{"ok":true,"seeded":%s}\n' "${1:-25}"
+}
+
+# Une image pour les entrees semees qui en ont une. N'importe quel fond d'ecran
+# fait l'affaire : le but est une carte avec une vraie photographie dessus, pour
+# que la mise en page soit exercee. Se rabat sur pas d'image du tout si les
+# themes sont ailleurs.
+seed_sample_image() {
+  local candidate
+  for candidate in \
+    "$HOME/.config/omarchy/current/theme/backgrounds"/* \
+    "${OMARCHY_PATH:-/usr/share/omarchy}/themes"/*/backgrounds/*; do
+    [[ -f $candidate ]] || continue
+    case $candidate in
+      *.png|*.jpg|*.jpeg|*.webp) printf '%s' "$candidate"; return ;;
+    esac
+  done
+  printf '%s' ""
+}
+
+# app | nom d'icone | titre | corps | il y a combien de minutes | image (1/0)
+readonly SEED_ROWS=(
+  "omasnap||Capture enregistree et copiee|Cliquer pour editer|2|1"
+  "Camera||Mouvement a la porte de derriere|17:41|9|1"
+  "Slack|slack|#design de Mara|J'ai pousse le nouvel etat vide, jette un oeil quand tu as une minute|4"
+  "Spotify|spotify|Talk Talk|Life's What You Make It|12"
+  "Chromium|chromium|Agenda|Le point quotidien commence dans 10 minutes|38"
+  "Signal|signal-desktop|Jules|On est toujours d'accord pour jeudi ?|55"
+  "omarchy||Rappel|Se lever et marcher un peu|96"
+  "Slack|slack|#ops de Ilse|Le deploiement 4f21c9 est en production|140"
+  "Thunderbird|thunderbird|Facture reglee|Nova Systems a regle la facture 2026-114|190"
+  "Discord|discord|#homelab de bram|cette courbe de ventilo a tout regle, 12 degres de moins|260"
+  "Chromium|chromium|GitHub|arturo a approuve ta pull request|320"
+  "Slack|slack|#design de Mara|et la variante sombre aussi|388"
+  "Spotify|spotify|Blockhead|The Music Scene|455"
+  "omarchy||Mise a jour disponible|17 paquets, dont linux 6.14.3|520"
+  "Signal|signal-desktop|Maman|Bien arrivee, tout va bien|1180"
+  "Slack|slack|#general de Wieke|Le dejeuner est dans la cuisine|1290"
+  "Chromium|chromium|Agenda|La retro passe a 15:00|1420"
+  "Thunderbird|thunderbird|Renouvellement de domaine|le domaine se renouvelle dans 14 jours|1580"
+  "Discord|discord|#homelab de bram|les nouveaux disques du NAS sont arrives|1750"
+  "Slack|slack|#ops de Ilse|Sauvegardes de nouveau au vert apres l'echange de disque|1900"
+  "Spotify|spotify|Nils Frahm|Says|2100"
+  "omarchy||Theme change|Tokyo Night|2400"
+  "Signal|signal-desktop|Jules|Jeudi ca marche, 19:00 ?|2900"
+  "Chromium|chromium|GitHub|CI au vert sur local.notifications|3300"
+  "Slack|slack|#design de Mara|on expedie|3800"
+  "Thunderbird|thunderbird|Recu|Hetzner, 14,28 EUR|4200"
+)
+
+seed_entries() {
+  local count=${1:-25} i row stamp key
+  local app icon summary body minutes wants_picture preview sample
+  local total=${#SEED_ROWS[@]}
+  sample=$(seed_sample_image)
+  for (( i = 0; i < count; i++ )); do
+    row=${SEED_ROWS[$((i % total))]}
+    IFS='|' read -r app icon summary body minutes wants_picture <<< "$row"
+    # Passe un tour de liste, les memes entrees reviennent, repoussees de deux
+    # jours de plus pour qu'elles tombent sur leur propre journee plutot que sur
+    # celle des entrees dont elles sont les copies.
+    stamp=$(( $(now_ms) - (minutes + (i / total) * 2880) * 60000 ))
+    key="seed-$stamp-$i"
+    preview=""
+    [[ ${wants_picture:-0} == 1 && -n $sample ]] && preview=$(copy_image "$sample" "$key" "preview")
+    jq -cn \
+      --arg key "$key" \
+      --arg app "$app" \
+      --arg appIcon "$icon" \
+      --arg summary "$summary" \
+      --arg body "$body" \
+      --arg preview "$preview" \
+      --argjson timestamp "$stamp" \
+      '{key:$key, app:$app, appIcon:$appIcon, summary:$summary, body:$body,
+        image:"", preview:$preview, file:"", glyph:"", urgency:1,
+        timestamp:$timestamp}' >> "$archive"
+  done
+  # Les entrees semees tombent dans le desordre ; l'archive se lit du plus recent
+  # au plus ancien depuis la fin, il faut donc la trier ou la moitie n'apparait
+  # jamais.
+  jq -sc 'sort_by(.timestamp) | .[]' "$archive" > "$archive.tmp" && mv -f "$archive.tmp" "$archive"
+}
+
+# Deux travaux sur l'archive existante, tous deux idempotents, tous deux sans
+# danger a relancer.
+#
+# Le premier est celui qui compte : une archive ecrite par une version anterieure
+# detient encore `exec`, la commande shell choisie par l'emetteur dont la
+# notification etait porteuse. Elles sont retirees, et le chemin d'image en est
+# extrait d'abord, pour que rien ne soit perdu sauf la capacite a executer la
+# commande d'un inconnu.
+#
+# Le second est l'ordinaire : les entrees qui n'ont jamais eu d'image en
+# recoivent une maintenant si le fichier qu'elles nomment est encore sur disque.
+backfill_previews() {
+  local tmp="$archive.backfill" line key exec_src file_src preview_copy filled=0
+  : > "$tmp"
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    key=$(printf '%s' "$line" | jq -r '.key // ""')
+    [[ -n $key ]] || { printf '%s\n' "$line" >> "$tmp"; continue; }
+
+    file_src=$(printf '%s' "$line" | jq -r '.file // ""')
+    if [[ -z $file_src ]]; then
+      exec_src=$(printf '%s' "$line" | jq -r '.exec // ""')
+      file_src=$(preview_source "$exec_src")
+      file_src=${file_src#file://}
+    fi
+
+    preview_copy=$(printf '%s' "$line" | jq -r '.preview // ""')
+    if [[ -z $preview_copy && -n $file_src ]] && (( previews )); then
+      preview_copy=$(copy_image "$file_src" "$key" "preview")
+      [[ -n $preview_copy ]] && filled=$(( filled + 1 ))
+    fi
+
+    printf '%s' "$line" | jq -c \
+      --arg file "$file_src" \
+      --arg preview "$preview_copy" \
+      'del(.exec) + {file: $file, preview: $preview}' >> "$tmp"
+  done < "$archive"
+  mv -f "$tmp" "$archive"
+  printf '%s' "$filled"
+}
+
+case ${1:-} in
+  sync)   shift; quiet=1; cmd_sync; printf '{"ok":true,"synced":true}\n' ;;
+  watch)  shift; cmd_watch ;;
+  list)   shift; cmd_list "${1:-200}" ;;
+  remove) shift; cmd_remove "${1:-}" ;;
+  clear)  shift; cmd_clear ;;
+  seen)   shift; cmd_seen "$@" ;;
+  unread) shift; cmd_unread ;;
+  seed)   shift; cmd_seed "${1:-25}" ;;
+  backfill)
+    shift; ensure_store
+    printf '{"ok":true,"filled":%s}\n' "$(with_lock backfill_previews)"
+    ;;
+  prune)  shift; ensure_store; with_lock prune; printf '{"ok":true,"pruned":true}\n' ;;
+  *)
+    cat >&2 <<'USAGE'
+notification-archive : le magasin derriere le centre de notifications
+
+  watch              suit le service de notifications et archive ce qu'il recoit
+  sync               rattrape tout ce qui n'est pas encore archive
+  list [LIMITE]      l'archive en JSON, du plus recent au plus ancien (defaut 200)
+  remove CLE         retire une notification
+  clear              les retire toutes
+  seen [MS]          lit ou pose la date de derniere ouverture du centre
+  unread             combien sont arrivees depuis
+  seed [N]           remplit l'archive d'un trafic d'essai
+  backfill           donne aux anciennes entrees l'image que leur action designe
+  prune              applique les limites de retention maintenant
+USAGE
+    exit 64
+    ;;
+esac
