@@ -59,6 +59,11 @@ BarWidget {
   property var displays: []
   property int enabledDisplayCount: 0
 
+  // Les taux de rafraichissement sont releves a part : `omarchy-monitor-state`
+  // appartient au paquet et ne rapporte que ce dont le panneau natif a besoin.
+  // Table indexee par nom d'ecran : { rate, rates, enabled }.
+  property var displayRates: ({})
+
   // Ecran qui porte la barre complete — les autres n'affichent que leurs
   // workspaces. La valeur vient de la barre, qui l'a deja resolue contre les
   // ecrans reellement branches : ce qui est marque ici est donc ce qui est
@@ -71,7 +76,16 @@ BarWidget {
 
   // La section des ecrans n'a de sens qu'a partir de deux : avec un seul, il n'y
   // a rien a choisir et la seule action possible serait d'eteindre le poste.
-  readonly property bool displaysVisible: displays.length > 1
+  // Elle s'ouvre malgre tout sur un poste a un seul ecran des que celui-ci
+  // propose plusieurs cadences : c'est le seul endroit ou ce choix existe.
+  readonly property bool displaysVisible: displays.length > 1 || rateChoiceExists
+
+  readonly property bool rateChoiceExists: {
+    for (var i = 0; i < displays.length; i++) {
+      if (ratesFor(displayNameAt(i)).length > 1) return true
+    }
+    return false
+  }
 
   function clampBrightness(value) {
     var n = Number(value)
@@ -100,6 +114,99 @@ BarWidget {
     if (p >= 20) return "Lamp light"
     if (p >= 10) return "Candlelit"
     return "Night owl"
+  }
+
+  // --- Taux de rafraichissement ----------------------------------------------
+
+  // Le pilote annonce souvent deux fois la meme cadence (59.95 et 60, 143.91 et
+  // 144). Tout raisonne donc a l'entier pres, y compris ce qui part vers le
+  // script : c'est lui qui retrouve ensuite le mode exact du pilote.
+  function sameRate(a, b) {
+    return Math.round(Number(a)) === Math.round(Number(b))
+  }
+
+  function formatRate(value) {
+    return String(Math.round(Number(value))) + "Hz"
+  }
+
+  function displayNameAt(index) {
+    var display = displays[index]
+    return display ? String(display.name || "") : ""
+  }
+
+  // Au-dela, les pastilles se partagent trop etroitement la largeur du panneau.
+  readonly property int maxRatePills: 5
+
+  // Politique d'affichage des cadences : c'est ici que se decide ce qu'on montre
+  // quand un ecran en annonce plus que la rangee n'en tient.
+  function pickRates(rates, current) {
+    var seen = ({})
+    var unique = []
+    for (var i = 0; i < rates.length; i++) {
+      var value = Number(rates[i])
+      if (!isFinite(value) || value <= 0) continue
+
+      var key = String(Math.round(value))
+      if (seen[key]) continue
+
+      seen[key] = true
+      unique.push(value)
+    }
+    unique.sort(function(a, b) { return a - b })
+
+    if (unique.length <= maxRatePills) return unique
+
+    // Trop de modes : on garde la plus basse — celle qu'on vient chercher pour
+    // la batterie — puis les plus hautes, et on force la presence du mode actif.
+    // Une rangee sans pastille active ferait croire que la cadence en cours
+    // n'est pas proposee.
+    var keep = unique.slice(unique.length - (maxRatePills - 1))
+    keep.unshift(unique[0])
+
+    for (var j = 0; j < keep.length; j++) {
+      if (sameRate(keep[j], current)) return keep
+    }
+    for (var k = 0; k < unique.length; k++) {
+      if (!sameRate(unique[k], current)) continue
+
+      keep.splice(1, 1, unique[k])
+      keep.sort(function(a, b) { return a - b })
+      break
+    }
+    return keep
+  }
+
+  // Un ecran eteint n'a aucun mode a proposer : hyprctl ne lui connait ni
+  // resolution ni cadence tant qu'il n'est pas rallume.
+  function ratesFor(name) {
+    var entry = name ? displayRates[name] : null
+    if (!entry || entry.enabled !== true) return []
+
+    return pickRates(entry.rates || [], entry.rate)
+  }
+
+  function currentRateFor(name) {
+    var entry = name ? displayRates[name] : null
+    return entry ? Number(entry.rate || 0) : 0
+  }
+
+  function parseRates(raw) {
+    var parsed = []
+    try {
+      parsed = JSON.parse(String(raw || "[]").trim())
+    } catch (e) {
+      parsed = []
+    }
+    if (!Array.isArray(parsed)) parsed = []
+
+    var table = ({})
+    for (var i = 0; i < parsed.length; i++) {
+      var entry = parsed[i]
+      if (entry && entry.name) table[String(entry.name)] = entry
+    }
+
+    displayRates = table
+    clampCursor()
   }
 
   function parseState(raw) {
@@ -144,8 +251,24 @@ BarWidget {
     }
   }
 
+  Process {
+    id: ratesProc
+
+    readonly property string scriptPath: String(Qt.resolvedUrl("display_rate.sh")).replace(/^file:\/\//, "")
+
+    command: ["bash", scriptPath, "list"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseRates(text)
+    }
+  }
+
   function refresh() {
     if (!stateProc.running) stateProc.running = true
+    // Les cadences ne se lisent que dans le panneau ouvert : inutile de forker
+    // hyprctl et jq toutes les cinq secondes, sur chaque ecran, pour un bouton
+    // de barre qui ne les montre pas.
+    if (opened && !ratesProc.running) ratesProc.running = true
   }
 
   // Cadence resserree quand le panneau est ouvert. Ferme, la barre n'a besoin
@@ -237,6 +360,16 @@ BarWidget {
     if (!actionProc.running) actionProc.running = true
   }
 
+  // La cadence, elle, se pose sur l'ecran nomme — c'est tout l'interet de la
+  // proposer ligne par ligne. `display_rate.sh` l'applique a chaud puis
+  // l'inscrit dans monitors.lua, sans quoi elle serait perdue au redemarrage.
+  function setRate(name, rate) {
+    if (!name) return
+
+    actionProc.command = ["bash", ratesProc.scriptPath, "set", String(name), String(Math.round(rate))]
+    if (!actionProc.running) actionProc.running = true
+  }
+
   Process {
     id: actionProc
 
@@ -308,6 +441,7 @@ BarWidget {
     cursorActive = false
     scaleCursor = currentScaleIndex()
     displayColumn = 0
+    rateCursor = 0
   }
 
   // --- Curseur clavier -------------------------------------------------------
@@ -318,6 +452,7 @@ BarWidget {
 
   property int cursor: 0
   property int scaleCursor: 0
+  property int rateCursor: 0
   property bool cursorActive: false
   // Colonne active a l'interieur d'une ligne d'ecran : 0 = allumage, 1 = ecran
   // principal. Meme mecanique que `scaleCursor` sur la ligne d'echelle, les
@@ -330,7 +465,12 @@ BarWidget {
     if (brightnessAvailable) list.push({ kind: "brightness", index: -1 })
     list.push({ kind: "scale", index: -1 })
     if (displaysVisible) {
-      for (var i = 0; i < displays.length; i++) list.push({ kind: "display", index: i })
+      for (var i = 0; i < displays.length; i++) {
+        list.push({ kind: "display", index: i })
+        // La rangee de cadences n'existe que si elle offre un choix : un ecran
+        // a mode unique ne merite pas une ligne de plus a traverser.
+        if (ratesFor(displayNameAt(i)).length > 1) list.push({ kind: "rate", index: i })
+      }
     }
     return list
   }
@@ -360,10 +500,36 @@ BarWidget {
     if (scaleCursor < 0) scaleCursor = 0
     if (displayColumn >= displayColumnCount) displayColumn = displayColumnCount - 1
     if (displayColumn < 0) displayColumn = 0
+
+    var rateCount = rateCountAt(cursor)
+    if (rateCursor >= rateCount) rateCursor = Math.max(0, rateCount - 1)
+    if (rateCursor < 0) rateCursor = 0
+  }
+
+  function rateCountAt(position) {
+    var row = rowAt(position)
+    return row && row.kind === "rate" ? ratesFor(displayNameAt(row.index)).length : 0
   }
 
   function moveCursor(delta) {
     cursor = Math.max(0, Math.min(rows.length - 1, cursor + delta))
+    syncRateCursor()
+  }
+
+  // En arrivant sur une rangee de cadences, la pastille pointee est celle du
+  // mode actif : c'est de la qu'on se deplace, pas du bord de la rangee.
+  function syncRateCursor() {
+    var row = rowAt(cursor)
+    if (!row || row.kind !== "rate") return
+
+    var name = displayNameAt(row.index)
+    var values = ratesFor(name)
+    var current = currentRateFor(name)
+
+    rateCursor = 0
+    for (var i = 0; i < values.length; i++) {
+      if (sameRate(values[i], current)) { rateCursor = i; return }
+    }
   }
 
   // Fleches horizontales : elles agissent a l'interieur de la ligne courante —
@@ -378,6 +544,8 @@ BarWidget {
       scaleCursor = Math.max(0, Math.min(scaleValues.length - 1, scaleCursor + delta))
     else if (row.kind === "display")
       displayColumn = Math.max(0, Math.min(displayColumnCount - 1, displayColumn + delta))
+    else if (row.kind === "rate")
+      rateCursor = Math.max(0, Math.min(rateCountAt(cursor) - 1, rateCursor + delta))
   }
 
   function activateCursor() {
@@ -385,6 +553,11 @@ BarWidget {
     if (!row) return
 
     if (row.kind === "scale") setScale(scaleValues[scaleCursor])
+    else if (row.kind === "rate") {
+      var name = displayNameAt(row.index)
+      var values = ratesFor(name)
+      if (rateCursor >= 0 && rateCursor < values.length) setRate(name, values[rateCursor])
+    }
     else if (row.kind === "display") {
       var display = displays[row.index]
       if (!display) return
@@ -681,13 +854,29 @@ BarWidget {
             Repeater {
               model: root.displays
 
-              DisplayRow {
+              // La ligne d'ecran et sa rangee de cadences forment un couple : la
+              // seconde ne se comprend que posee sous la premiere, en retrait
+              // pour dire qu'elle en depend.
+              Column {
+                id: displayEntry
+
                 required property var modelData
                 required property int index
 
                 width: parent.width
-                display: modelData
-                rowIndex: index
+                spacing: Style.space(2)
+
+                DisplayRow {
+                  width: parent.width
+                  display: displayEntry.modelData
+                  rowIndex: displayEntry.index
+                }
+
+                RateRow {
+                  width: parent.width
+                  display: displayEntry.modelData
+                  rowIndex: displayEntry.index
+                }
               }
             }
           }
@@ -799,6 +988,101 @@ BarWidget {
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.bold: pill.isCurrent
+    }
+  }
+
+  // Rangee de cadences d'un ecran, posee sous sa ligne. Elle s'efface quand
+  // l'ecran est eteint ou n'annonce qu'un seul mode : une pastille unique ne
+  // serait qu'un bouton sans effet.
+  component RateRow: Item {
+    id: rateRow
+
+    required property var display
+    required property int rowIndex
+
+    readonly property string displayName: display ? String(display.name || "") : ""
+    readonly property var values: root.ratesFor(displayName)
+    readonly property real currentRate: root.currentRateFor(displayName)
+
+    visible: values.length > 1
+    height: visible ? Style.space(24) : 0
+
+    Grid {
+      id: rateGrid
+
+      // La rangee demarre sous le nom de l'ecran, pas sous son glyphe, et
+      // s'arrete avant l'etoile de la ligne du dessus pour ne pas sembler
+      // passer dessous.
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.leftMargin: Style.space(36)
+      anchors.rightMargin: Style.space(34)
+      anchors.verticalCenter: parent.verticalCenter
+      columns: Math.max(1, rateRow.values.length)
+      spacing: Style.space(4)
+
+      readonly property real cellWidth: columns > 0
+        ? (width - spacing * (columns - 1)) / columns
+        : 0
+
+      Repeater {
+        model: rateRow.values
+
+        RatePill {
+          required property var modelData
+          required property int index
+
+          rateValue: Number(modelData)
+          rateIndex: index
+          displayName: rateRow.displayName
+          displayRow: rateRow.rowIndex
+          width: rateGrid.cellWidth
+        }
+      }
+    }
+  }
+
+  // Pastille de cadence. Meme vocabulaire que la pastille d'echelle, en plus
+  // discret : elle depend de la ligne au-dessus d'elle, et porte le nom de
+  // l'ecran auquel elle s'applique.
+  component RatePill: CursorSurface {
+    id: ratePill
+
+    required property real rateValue
+    required property int rateIndex
+    required property string displayName
+    required property int displayRow
+
+    readonly property bool isCurrent: root.sameRate(rateValue, root.currentRateFor(displayName))
+
+    height: Style.space(22)
+    current: ratePill.isCurrent
+    hasCursor: root.cursorActive
+      && root.cursor === root.rowIndexOf("rate", ratePill.displayRow)
+      && root.rateCursor === ratePill.rateIndex
+    foreground: root.foregroundColor
+    accent: root.accentColor
+
+    HoverHandler {
+      onHoveredChanged: if (hovered) {
+        root.pointCursorAt("rate", ratePill.displayRow)
+        root.rateCursor = ratePill.rateIndex
+      }
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.setRate(ratePill.displayName, ratePill.rateValue)
+    }
+
+    Text {
+      anchors.centerIn: parent
+      text: root.formatRate(ratePill.rateValue)
+      color: ratePill.isCurrent ? root.accentColor : root.mutedColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: ratePill.isCurrent
     }
   }
 
