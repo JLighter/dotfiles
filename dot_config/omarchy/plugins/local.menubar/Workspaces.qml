@@ -44,7 +44,46 @@ BarWidget {
     for (var i = 0; i < Quickshell.screens.length; i++) Hyprland.monitorFor(Quickshell.screens[i])
   }
 
-  readonly property var monitor: root.barScreen ? Hyprland.monitorFor(root.barScreen) : null
+  // Compteur de rafraîchissement forcé.
+  //
+  // Un binding QML ne rejoue que si une propriété *lue pendant sa dernière
+  // évaluation* change. Une branche court-circuitée par un `continue` n'a donc
+  // enregistré aucune dépendance : un `moveworkspace` qui pousse un workspace
+  // hors tranche sur cet écran ne réveille rien, et la barre reste sur son
+  // ancien calcul. Lire `revision` dans un binding l'y inscrit de force ;
+  // l'incrémenter le fait repartir de zéro.
+  property int revision: 0
+
+  // Les événements Hyprland qui peuvent changer la composition de la barre.
+  // Volontairement plus large que ce que l'on affiche : un événement de trop ne
+  // coûte qu'un recalcul de cinq pastilles, un événement manquant laisse une
+  // barre mensongère.
+  readonly property var workspaceEvents: [
+    "workspace", "workspacev2",
+    "createworkspace", "createworkspacev2",
+    "destroyworkspace", "destroyworkspacev2",
+    "moveworkspace", "moveworkspacev2",
+    "focusedmon", "urgent"
+  ]
+
+  Connections {
+    target: Hyprland
+
+    function onRawEvent(event) {
+      if (root.workspaceEvents.indexOf(event.name) === -1) return
+
+      // `Hyprland.workspaces` se remplit paresseusement, comme `monitors` plus
+      // haut : on relit l'état par IPC avant de réveiller les bindings, sinon
+      // ils recalculeraient sur un modèle périmé.
+      Hyprland.refreshWorkspaces()
+      root.revision++
+    }
+  }
+
+  readonly property var monitor: {
+    var _ = root.revision
+    return root.barScreen ? Hyprland.monitorFor(root.barScreen) : null
+  }
 
   // Ecrans de gauche a droite, puis de haut en bas — le meme ordre que
   // workspaces.lua, pour que la pastille "3" et la touche SUPER+3 designent bien
@@ -67,6 +106,23 @@ BarWidget {
     return 0
   }
 
+  // Nom de l'écran qui porte ce workspace.
+  //
+  // `workspace.monitor` reste null tant que Quickshell n'a pas hydraté l'objet
+  // moniteur correspondant. On se rabat alors sur la charge IPC brute, où le
+  // moniteur n'est qu'une chaîne : sans ce repli, un workspace serait écarté de
+  // la barre pendant cette fenêtre — donc inatteignable à la souris, ce que la
+  // boucle « hors tranche » cherche justement à éviter.
+  function monitorNameOf(workspace) {
+    if (!workspace) return ""
+    if (workspace.monitor && workspace.monitor.name) return String(workspace.monitor.name)
+
+    var ipc = workspace.lastIpcObject
+    if (ipc && ipc.monitor) return String(ipc.monitor)
+
+    return ""
+  }
+
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
     for (var i = 0; i < values.length; i++) {
@@ -81,6 +137,9 @@ BarWidget {
   // declare `persistent`, et la barre ne se decale donc pas quand on ferme le
   // dernier client d'un workspace.
   function slotEntries() {
+    // Inscrit `revision` parmi les dépendances du binding qui nous appelle.
+    var _ = root.revision
+
     var base = root.slotBase
     var entries = []
 
@@ -102,7 +161,10 @@ BarWidget {
       // ignore, ils ne se selectionnent pas comme un workspace normal.
       if (workspace.id <= 0) continue
       if (workspace.id > base && workspace.id <= base + root.slotsPerScreen) continue
-      if (!workspace.monitor || workspace.monitor.name !== name) continue
+      // Un propriétaire inconnu ne se rattache à aucun écran : on s'abstient
+      // plutôt que de l'afficher sur les deux barres.
+      var owner = root.monitorNameOf(workspace)
+      if (owner === "" || owner !== name) continue
 
       entries.push({ id: workspace.id, label: String(workspace.id) })
     }
@@ -155,11 +217,19 @@ BarWidget {
           anchors.topMargin: -root.haloInsetY
           anchors.bottomMargin: -root.haloInsetY
           radius: Math.min(height / 2, Style.cornerRadius)
-          color: root.accentColor
-          opacity: workspaceButton.tooltipHovered ? root.accentFillOpacity : 0
+          // Le même halo sert deux rôles : voile au survol, pastille pleine
+          // quand le workspace est urgent. La distinction tient à la forme et
+          // non à la teinte, donc elle reste lisible sur un thème où
+          // `bar.active` et `urgent` se confondent.
+          color: workspaceButton.urgent ? Color.urgent : root.accentColor
+          opacity: workspaceButton.urgent ? 1 : (workspaceButton.tooltipHovered ? root.accentFillOpacity : 0)
 
           Behavior on opacity {
             NumberAnimation { duration: root.revealDuration; easing.type: Easing.OutCubic }
+          }
+
+          Behavior on color {
+            ColorAnimation { duration: root.revealDuration; easing.type: Easing.OutCubic }
           }
         }
 
@@ -168,6 +238,12 @@ BarWidget {
 
           readonly property var workspace: root.workspaceById(cell.modelData.id)
           readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
+
+          // Hyprland lève `urgent` quand un client réclame l'attention depuis un
+          // workspace qui n'a pas le focus. Quickshell 0.3 l'expose en propriété
+          // avec son signal de changement : rien à suivre à la main ici, le
+          // `revision` ci-dessus ne couvre que l'apparition du workspace.
+          readonly property bool urgent: workspace !== null && workspace.urgent === true
 
           // Le workspace actif de CET ecran, pas celui qui a le focus clavier :
           // les deux barres montrent chacune ou elles en sont, et celle de
@@ -179,9 +255,13 @@ BarWidget {
           anchors.fill: parent
           bar: root.bar
           text: cell.modelData.label
-          // Actif = couleur d'accent ; vide = estompe, sans disparaitre.
-          active: current
-          opacity: occupied || current ? 1 : 0.4
+          // Actif = couleur d'accent ; vide = estompé, sans disparaître.
+          // Urgent = pastille pleine, et le texte passe alors sur le fond de la
+          // barre : la couleur d'accent s'y perdrait.
+          active: current && !urgent
+          foreground: urgent ? Color.bar.background
+                             : (root.bar ? root.bar.barForeground : Color.foreground)
+          opacity: occupied || current || urgent ? 1 : 0.4
           fixedWidth: root.vertical ? root.islandSize : Style.space(20)
           fixedHeight: root.islandSize
           onPressed: function(mouseButton) {
