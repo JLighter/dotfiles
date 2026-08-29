@@ -63,6 +63,26 @@ hl.config({
   },
 })
 
+-- Le blur ci-dessus ne touche que les fenêtres. Les surfaces layer-shell —
+-- barre, menu, overlays du shell — doivent le demander une par une.
+--
+-- `ignore_alpha` fait tout le travail de découpe : le menu est une surface
+-- plein écran, dont le voile de fond est à 0.5 et la carte à 0.92 (voir
+-- `cardOpacity` dans local.menu/Menu.qml). Le seuil passe entre les deux, donc
+-- seule la carte floute ce qu'elle recouvre — le reste de l'écran garde son
+-- voile net, sans le flou général d'un Spotlight.
+--
+-- `xray = false` va à l'encontre du réglage global, et c'est voulu : sous une
+-- carte de menu on veut voir flouté ce qui est réellement dessous, pas le fond
+-- d'écran qu'un xray ferait remonter à travers les fenêtres.
+hl.layer_rule({
+  name = "blur-omarchy-menu",
+  match = { namespace = "^omarchy-menu$" },
+  blur = true,
+  ignore_alpha = 0.6,
+  xray = false,
+})
+
 -- https://wiki.hypr.land/Configuring/Basics/Variables/#animations
 -- hl.config({
 --   animations = {

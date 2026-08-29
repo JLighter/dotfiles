@@ -23,7 +23,7 @@ devenu `descriptionTextMatches`, `normalizeKeywords` a disparu).
 la mécanique (parsing JSONC, providers, gardes `when:`/`checked:`, navigation,
 mode dmenu) est celle d'Omarchy à la ligne près.
 
-### Les points d'habillage à réappliquer
+### Couche 1 — les points d'habillage à réappliquer
 
 Tous dans `Menu.qml`. Objectif : que le menu parle la même langue que la barre.
 
@@ -44,6 +44,45 @@ Tous dans `Menu.qml`. Objectif : que le menu parle la même langue que la barre.
 Trois teintes dérivées à redéclarer en tête : `mutedColor`
 (`Qt.darker(foreground, 1.4)`), `islandFill` (encre à 6 %), `accentFill`
 (accent à 18 %).
+
+### Couche 2 — la forme Raycast
+
+Ajoutée le 2026-08-29, par-dessus la couche 1 et sans toucher à `MenuModel.js`.
+Le moteur amont faisait déjà l'essentiel — recherche globale scorée sur tout
+l'arbre (`searchScore`), sous-titres, sections `ViewSection`, icônes d'apps —
+et seule la présentation manquait.
+
+| Point | Avant | Ici |
+|---|---|---|
+| Largeur de carte | `Style.space(300)`, 520 pour deux routes | `Style.space(560)` pour toutes |
+| En-tête | un `Text` : titre du menu, puis texte tapé | loupe + fil d'Ariane en pastille + saisie + caret |
+| Titre du menu courant | placeholder de l'en-tête | pastille `crumb`, à gauche de la saisie |
+| Échelle de la saisie | `title` | `heading` |
+| Chemin d'un résultat | sous-titre, ligne doublée à 48 | colonne de droite, ligne simple |
+| Sous-titre sous le libellé | recherche **et** dmenu | dmenu seul |
+| Frontière de recherche | filet anonyme (`section === "drilldown"`) | bandeau nommé, via `sectionFor()` |
+| Pied de carte | absent | rappels clavier + compteur de résultats |
+| Fond de carte | `background` opaque | `cardOpacity` = 0.92 |
+| Ombre | aucune | `MultiEffect`, piloté par `cardShadow` |
+| Ouverture | instantanée | fondu + montée de 96 % |
+
+Trois interrupteurs en tête de fichier pour revenir en arrière sans défaire le
+reste : `cardShadow` (à couper en premier si le texte paraît moins net — le
+`layer.enabled` qu'elle impose supprime l'anti-aliasing sous-pixel),
+`cardOpacity` (à 1.0 la carte redevient pleine et la `layer_rule` de blur n'a
+plus de prise) et `showFooter`.
+
+Deux dépendances hors du plugin :
+
+- `~/.config/hypr/looknfeel.lua` porte la `layer_rule` `blur-omarchy-menu`, dont
+  le `ignore_alpha = 0.6` passe entre le voile de fond (0.5) et la carte (0.92).
+  Changer `cardOpacity` sous ce seuil supprime le flou.
+- `~/.config/hypr/bindings.lua` pointe les raccourcis sur `local.menu`.
+
+`sectionFor(row, atCurrentLevel)` est le seul point ouvert : elle ne fait pour
+l'instant que renommer le filet du clone. Toute règle plus fine doit trier les
+lignes dans le même mouvement — `ListView` ne regroupe que les lignes
+consécutives de même valeur.
 
 ### Ce que cette resynchro a rapporté
 
@@ -72,5 +111,10 @@ diff ~/.config/omarchy/plugins/local.menu/Menu.qml \
      /usr/share/omarchy/shell/plugins/menu/Menu.qml
 ```
 
-Elle doit valoir ~121 lignes — l'habillage et l'en-tête, rien d'autre. Si le
-chiffre explose, c'est que l'amont a bougé : resynchroniser plutôt que patcher.
+Elle doit valoir ~500 lignes — les deux couches d'habillage et l'en-tête, rien
+d'autre (~121 pour la seule couche 1, avant la forme Raycast). Si le chiffre
+explose, c'est que l'amont a bougé : resynchroniser plutôt que patcher.
+
+Le prix de la couche 2 est là : la resynchro coûte désormais deux passes de
+réapplication au lieu d'une. Faire la couche 1 d'abord, vérifier que le menu
+s'ouvre, puis la couche 2 — elles sont indépendantes.

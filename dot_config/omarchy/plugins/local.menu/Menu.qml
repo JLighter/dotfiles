@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Effects
 import qs.Commons
 import qs.Ui
 import "MenuModel.js" as MenuModel
@@ -136,7 +137,10 @@ Item {
   readonly property real rowReservedBorderRight: Border.right(selectedBorderSpec)
   readonly property int cornerRadius: Style.cornerRadius
   property int contentMargin: Style.spacing.panelPadding
-  property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
+  // Le champ de recherche prend la hauteur d'une vraie barre de saisie et non
+  // celle d'une ligne de titre : c'est la premiere chose que l'oeil doit
+  // trouver en ouvrant la carte.
+  property int headerHeight: Math.max(Style.space(46), Style.font.heading + Style.spacing.controlPaddingY * 4)
   property int contentSpacing: Style.spacing.md
   // Lignes plus basses que le menu natif (50 / 58) : a l'echelle typographique
   // des panneaux, le menu tient dans la meme densite qu'un panneau de barre.
@@ -147,13 +151,39 @@ Item {
   property int rowPeek: Math.round(baseRowHeight * 0.55)
   property int rowSpacing: Style.spacing.xs
   property int dividerHeight: Style.space(17)
+
+  // ── Habillage Raycast ──
+  // Bandeau de groupe : des capitales discretes, la ou le clone posait un
+  // simple filet sans nom.
+  property int sectionHeaderHeight: Style.space(26)
+  // Barre d'actions en pied de carte. Muette en dmenu, ou la carte est un
+  // prompt ponctuel et non un plan de travail.
+  property int footerHeight: Style.space(30)
+  property bool showFooter: !root.dmenuActive
+  property var footerHints: [
+    { key: "\u21b5",  label: "Open" },
+    { key: "\u232b",  label: "Back" },
+    { key: "esc",      label: "Close" }
+  ]
+  // Translucidite de la carte. A 1.0 le blur pose en layer_rule cote Hyprland
+  // ne se voit pas : c'est la part transparente qui laisse remonter le fond
+  // floute. Voir ~/.config/hypr/looknfeel.lua.
+  property real cardOpacity: 0.92
+  // Ombre portee facon Spotlight. Premier reglage a couper si le texte de la
+  // carte parait moins net : l'ombre force le rendu dans un FBO, ou l'anti-
+  // aliasing sous-pixel n'a plus cours.
+  property bool cardShadow: true
   property bool searchDivider: false
   property int layoutSerial: 0
-  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : ((root.activeMenu === "trigger.capture.screenrecord" || root.activeMenu === "style.font") ? Style.space(520) : Style.space(300)), panel.width - Style.gapsOut * 2)
+  // La carte cesse d'etre une colonne pour devenir un plan de travail. Les
+  // deux routes qui reclamaient 520 a part (capture, fontes) tiennent
+  // desormais dans la largeur commune.
+  property int cardWidth: Math.min(root.dmenuActive ? Style.space(root.dmenuWidth) : Style.space(560), panel.width - Style.gapsOut * 2)
   property int visibleRowsHeight: root.dmenuActive ? dmenuRowListHeight(layoutSerial, displayModel.count, filterText) : rowListHeight(layoutSerial, displayModel.count, filterText, searchDivider)
   property int cardHeight: root.dmenuActive
     ? Math.min(contentMargin * 2 + headerHeight + (mode === "input" ? 0 : contentSpacing + visibleRowsHeight), panel.height - Style.gapsOut * 2)
-    : Math.min(contentMargin * 2 + headerHeight + contentSpacing + visibleRowsHeight, panel.height - Style.gapsOut * 2)
+    : Math.min(contentMargin * 2 + headerHeight + contentSpacing + visibleRowsHeight
+        + (showFooter ? contentSpacing + footerHeight : 0), panel.height - Style.gapsOut * 2)
 
   function finishRequest(selection) {
     if (!root.requestActive || !root.doneFile) {
@@ -185,7 +215,25 @@ Item {
   // Menu rows only surface their detail while a search is narrowing them;
   // dmenu rows carry caller-supplied subtext that must always be visible.
   function rowHeightForDetail(detail) {
-    return (root.filterText || root.dmenuActive) && detail ? root.detailRowHeight : root.baseRowHeight
+    // Le chemin d'une entree trouvee par recherche est passe en accessoire de
+    // droite ; seul le sous-texte dmenu reste sous le libelle, et lui seul
+    // reclame donc la ligne haute.
+    return root.dmenuActive && detail ? root.detailRowHeight : root.baseRowHeight
+  }
+
+  // Nom du groupe sous lequel une ligne de resultat se range. Renvoyer "" range
+  // la ligne sans bandeau.
+  //
+  // ATTENTION : ListView regroupe les lignes *consecutives* de meme valeur. Une
+  // regle qui ne suit pas l'ordre de tri (ici : niveau courant d'abord, puis le
+  // reste, chacun trie par score) fera reapparaitre le meme bandeau plusieurs
+  // fois. Toute regle plus fine — par `kind`, par sous-arbre — doit donc trier
+  // les lignes dans le meme mouvement, dans rebuildDisplay().
+  //
+  // TODO(jlighter) : c'est ici que se decide le decoupage des resultats. Le
+  // defaut ci-dessous ne fait que renommer le filet du clone.
+  function sectionFor(row, atCurrentLevel) {
+    return atCurrentLevel ? "" : "Elsewhere"
   }
 
   // Height the card can devote to rows before running off the screen — or
@@ -195,6 +243,7 @@ Item {
   function availableRowsHeight() {
     var top = panel.cardTop >= 0 ? panel.cardTop : Style.gapsOut
     var available = panel.height - top - Style.gapsOut - root.contentMargin * 2 - root.headerHeight - root.contentSpacing
+      - (root.showFooter ? root.contentSpacing + root.footerHeight : 0)
     // The starting menu sets the ceiling along with the offset: drilling into
     // a longer submenu scrolls behind the fold instead of growing the card.
     if (panel.maxRowsHeight >= 0) available = Math.min(available, panel.maxRowsHeight)
@@ -229,7 +278,7 @@ Item {
     for (var i = 0; i < displayModel.count; i++) {
       var row = displayModel.get(i)
       if (i > 0) total += root.rowSpacing
-      if (row.section === "drilldown" && previousSection !== "drilldown") total += root.dividerHeight
+      if (row.section !== previousSection && String(row.section).length > 0) total += root.sectionHeaderHeight
       total += root.rowHeightForDetail(row.detail)
       previousSection = row.section
       totals.push(total)
@@ -640,7 +689,8 @@ Item {
       drilldownRows.sort(searchSort)
       root.searchDivider = currentRows.length > 0 && drilldownRows.length > 0
       if (root.searchDivider) {
-        for (var d = 0; d < drilldownRows.length; d++) drilldownRows[d].section = "drilldown"
+        for (var c = 0; c < currentRows.length; c++) currentRows[c].section = root.sectionFor(currentRows[c], true)
+        for (var d = 0; d < drilldownRows.length; d++) drilldownRows[d].section = root.sectionFor(drilldownRows[d], false)
       }
       rows = currentRows.concat(drilldownRows)
     } else {
@@ -1100,9 +1150,47 @@ Item {
       radius: root.cornerRadius
       anchors.horizontalCenter: parent.horizontalCenter
       y: panel.effectiveCardTop
-      color: root.background
+      // La carte n'est plus tout a fait opaque : c'est cette part de
+      // transparence que le blur pose sur le namespace omarchy-menu vient
+      // remplir. Ramener cardOpacity a 1.0 rend la carte pleine et neutralise
+      // la layer_rule sans avoir a la retirer.
+      color: Util.alpha(root.background, root.cardOpacity)
       borderSpec: root.borderSpec
       padding: root.contentMargin
+
+      // Ombre portee. autoPaddingEnabled etend la zone rendue pour que l'ombre
+      // ne soit pas coupee aux bornes de la carte.
+      layer.enabled: root.cardShadow
+      layer.smooth: true
+      layer.effect: MultiEffect {
+        shadowEnabled: true
+        shadowColor: Qt.rgba(0, 0, 0, 0.55)
+        shadowBlur: 1.0
+        shadowVerticalOffset: Style.space(10)
+      }
+
+      // Ouverture facon Spotlight : la carte arrive a 96 % et se pose. Le
+      // compositeur ne joue rien ici — `no_anim` couvre le namespace
+      // omarchy-menu — donc l'animation est entierement portee par le QML.
+      property bool entered: false
+      transformOrigin: Item.Center
+      opacity: entered ? 1 : 0
+      scale: entered ? 1 : 0.96
+
+      Behavior on opacity {
+        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+      }
+
+      Behavior on scale {
+        NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+      }
+
+      Connections {
+        target: panel
+        function onVisibleChanged() { card.entered = panel.visible }
+      }
+
+      Component.onCompleted: Qt.callLater(function() { card.entered = panel.visible })
 
       MouseArea { anchors.fill: parent; onClicked: {} }
 
@@ -1188,23 +1276,70 @@ Item {
         anchors.leftMargin: card.contentLeftInset
         spacing: root.contentSpacing
 
-        Rectangle {
+        // Barre de recherche : loupe, fil d'Ariane en pastille, texte saisi,
+        // caret. La carte n'a toujours pas de TextInput — la frappe reste captee
+        // par keyCatcher — mais elle en a desormais l'apparence.
+        Item {
           width: parent.width
           height: root.headerHeight
-          radius: root.cornerRadius
-          color: "transparent"
 
           Text {
+            id: searchGlyph
             anchors.left: parent.left
-            anchors.right: parent.right
+            anchors.leftMargin: Style.space(4)
             anchors.verticalCenter: parent.verticalCenter
-            text: root.filterText || (root.dmenuActive ? (root.dmenuPrompt + "…") : ((root.item(root.activeMenu) ? (root.item(root.activeMenu).title || root.item(root.activeMenu).label) : "Go") + "…"))
+            anchors.verticalCenterOffset: -Style.space(2)
+            text: ""
+            // Meme bascule que le glyphe d'une ligne sous curseur : l'accent
+            // signale que le champ est actif, pas qu'il est different.
+            color: root.filterText ? root.accent : root.mutedColor
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.icon
+
+            Behavior on color {
+              ColorAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
+          }
+
+          // Le titre du menu courant quittait l'en-tete en devenant un simple
+          // placeholder de recherche. Il revient en pastille, sans reprendre la
+          // ligne entiere : le repere de navigation survit au champ de saisie.
+          Rectangle {
+            id: crumb
+            visible: !root.dmenuActive && root.activeMenu !== "root"
+            anchors.left: searchGlyph.right
+            anchors.leftMargin: Style.space(10)
+            anchors.verticalCenter: searchGlyph.verticalCenter
+            width: visible ? crumbText.implicitWidth + Style.space(16) : 0
+            height: Style.space(22)
+            radius: Math.min(root.cornerRadius, Style.space(8))
+            color: root.islandFill
+
+            Text {
+              id: crumbText
+              anchors.centerIn: parent
+              text: root.item(root.activeMenu) ? (root.item(root.activeMenu).title || root.item(root.activeMenu).label) : ""
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.weight: Font.Medium
+            }
+          }
+
+          Text {
+            id: queryText
+            anchors.left: crumb.visible ? crumb.right : searchGlyph.right
+            anchors.leftMargin: Style.space(10)
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(4)
+            anchors.verticalCenter: searchGlyph.verticalCenter
+            text: root.filterText || (root.dmenuActive ? root.dmenuPrompt : "Search…")
             // Encre pleine des qu'on tape, secondaire tant que la ligne n'est
             // qu'une invite — la meme distinction que dans les champs de la
             // barre, portee par la couleur plutot que par l'opacite.
             color: root.filterText ? root.foreground : root.mutedColor
             font.family: root.fontFamily
-            font.pixelSize: Style.font.title
+            font.pixelSize: Style.font.heading
             elide: Text.ElideRight
 
             Behavior on color {
@@ -1212,6 +1347,32 @@ Item {
             }
           }
 
+          // Caret dessine a la main, faute de TextInput. Il se retire des que
+          // le texte deborde : cale sur implicitWidth, il partirait hors champ.
+          Rectangle {
+            visible: root.filterText.length > 0 && queryText.implicitWidth < queryText.width
+            x: queryText.x + queryText.implicitWidth + Style.space(2)
+            anchors.verticalCenter: queryText.verticalCenter
+            width: Math.max(1, Style.space(2))
+            height: Style.font.heading
+            radius: width / 2
+            color: root.accent
+
+            SequentialAnimation on opacity {
+              running: true
+              loops: Animation.Infinite
+              NumberAnimation { to: 0; duration: 520; easing.type: Easing.InOutQuad }
+              NumberAnimation { to: 1; duration: 520; easing.type: Easing.InOutQuad }
+            }
+          }
+
+          Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Style.spacing.hairline
+            color: Util.alpha(root.foreground, 0.12)
+          }
         }
 
         Item {
@@ -1229,20 +1390,30 @@ Item {
             section.property: "section"
             section.criteria: ViewSection.FullString
             section.delegate: Item {
+              id: sectionHeader
               required property string section
 
               width: ListView.view.width
-              height: section === "drilldown" ? root.dividerHeight : 0
-              visible: section === "drilldown"
+              height: sectionHeader.section.length > 0 ? root.sectionHeaderHeight : 0
+              visible: sectionHeader.section.length > 0
 
-              Rectangle {
+              // Capitales espacees, encre secondaire, cale sur la ligne de base
+              // des libelles : le bandeau se lit comme une etiquette et non
+              // comme une entree de plus.
+              Text {
                 anchors.left: parent.left
-                anchors.leftMargin: Style.space(4)
+                anchors.leftMargin: root.rowReservedBorderLeft + Style.space(8)
                 anchors.right: parent.right
-                anchors.rightMargin: Style.space(4)
-                anchors.verticalCenter: parent.verticalCenter
-                height: Style.spacing.hairline
-                color: Util.alpha(root.foreground, 0.2)
+                anchors.rightMargin: Style.space(8)
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Style.space(6)
+                text: sectionHeader.section.toUpperCase()
+                color: root.mutedColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.weight: Font.Medium
+                font.letterSpacing: 0.8
+                elide: Text.ElideRight
               }
             }
 
@@ -1334,7 +1505,7 @@ Item {
                 id: contentColumn
                 anchors.left: row.hasIcon ? iconText.right : parent.left
                 anchors.leftMargin: row.hasIcon ? Style.space(6) : root.rowReservedBorderLeft + Style.space(18)
-                anchors.right: trail.left
+                anchors.right: pathText.left
                 anchors.rightMargin: Style.space(6)
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Style.space(3)
@@ -1352,16 +1523,37 @@ Item {
                   elide: Text.ElideRight
                 }
 
+                // Ne subsiste que pour dmenu, ou le sous-texte precise la ligne
+                // au lieu d'en donner le chemin.
                 Text {
                   width: parent.width
                   text: row.detail
-                  visible: (root.filterText || row.kind === "dmenu") && row.detail.length > 0
+                  visible: row.kind === "dmenu" && row.detail.length > 0
                   color: root.foreground
                   opacity: 0.52
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
                   elide: Text.ElideRight
                 }
+              }
+
+              // Chemin de l'entree, en colonne de droite plutot qu'en sous-titre.
+              // C'est la place que Raycast donne au type d'action, et elle rend
+              // sa ligne simple a chaque resultat de recherche. Elide a gauche :
+              // d'un chemin tronque, c'est la fin qui renseigne.
+              Text {
+                id: pathText
+                visible: root.filterText.length > 0 && row.kind !== "dmenu" && row.detail.length > 0
+                text: row.detail
+                color: root.mutedColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideLeft
+                horizontalAlignment: Text.AlignRight
+                width: visible ? Math.min(implicitWidth, row.width * 0.38) : 0
+                anchors.right: trail.left
+                anchors.rightMargin: visible ? Style.space(8) : 0
+                y: contentColumn.y + labelText.y + (labelText.height - height) / 2
               }
 
               Row {
@@ -1430,7 +1622,7 @@ Item {
               ? Math.max(0, Math.min(1, (resultList.contentY - resultList.originY) / height))
               : 0
             gradient: Gradient {
-              GradientStop { position: 0; color: root.background }
+              GradientStop { position: 0; color: Util.alpha(root.background, root.cardOpacity) }
               GradientStop { position: 1; color: Util.alpha(root.background, 0) }
             }
           }
@@ -1446,7 +1638,7 @@ Item {
               : 0
             gradient: Gradient {
               GradientStop { position: 0; color: Util.alpha(root.background, 0) }
-              GradientStop { position: 1; color: root.background }
+              GradientStop { position: 1; color: Util.alpha(root.background, root.cardOpacity) }
             }
           }
 
@@ -1477,9 +1669,63 @@ Item {
           }
         }
 
+        // Pied d'actions. Il ne remplace aucun raccourci : il rend visibles
+        // ceux que keyCatcher ecoute deja, et donne au compteur de resultats
+        // une place fixe que la liste ne peut pas lui prendre.
         Item {
           width: parent.width
-          height: 0
+          height: root.showFooter ? root.footerHeight : 0
+          visible: root.showFooter
+
+          Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: Style.spacing.hairline
+            color: Util.alpha(root.foreground, 0.12)
+          }
+
+          Row {
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(4)
+            anchors.bottom: parent.bottom
+            spacing: Style.space(14)
+
+            Repeater {
+              model: root.footerHints
+
+              delegate: Row {
+                required property var modelData
+                spacing: Style.space(5)
+
+                Text {
+                  text: modelData.key
+                  color: root.accent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                  text: modelData.label
+                  color: root.mutedColor
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+            }
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(4)
+            anchors.bottom: parent.bottom
+            text: displayModel.count === 1 ? "1 result" : displayModel.count + " results"
+            color: root.mutedColor
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
         }
       }
     }

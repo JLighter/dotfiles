@@ -82,7 +82,8 @@ end
 -- Meme table que $OMARCHY_PATH/default/hypr/bindings/utilities.lua, a la route
 -- pres : toute entree ajoutee la-bas devra etre reportee ici.
 local menu_bindings = {
-  { keys = "SUPER + ALT + SPACE",          description = "Omarchy menu",    route = "root" },
+  { keys = "SUPER + SPACE",                description = "Omarchy menu",    route = "root" },
+  { keys = "SUPER + ALT + SPACE",          description = "Apps menu",       route = "apps" },
   { keys = "SUPER + SHIFT + code:201",     description = "Omarchy menu",    route = "root" },
   { keys = "SUPER + ESCAPE",               description = "System menu",     route = "system" },
   { keys = "SUPER + CTRL + O",             description = "Toggle menu",     route = "toggle" },
