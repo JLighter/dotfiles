@@ -11,15 +11,6 @@ Toujours répondre en français. Les termes techniques et identifiants de code r
 
 ---
 
-## Framework
-
-Ce projet suit le framework **"Au-delà de la génération de code"** v1.0.0.
-Manifeste : `Manifesto/README.md`
-Socle commun : `Guides/socle-commun.md`
-Guides métiers : `Guides/`
-
----
-
 ## Principes fondamentaux
 
 ### Obligation de maîtrise
@@ -152,7 +143,7 @@ Le sub-agent n'exécute qu'après validation. Sur les tâches LOW, pas de plan �
 Un agent ne charge **pas tout le contexte disponible** — il évalue ce dont il a besoin pour la tâche :
 
 1. **Évaluer la tâche** — Quel est le sujet ? Quels documents sont pertinents ?
-2. **Vérifier ce qu'on a** — Le frontmatter du `load-context` suffit-il ou faut-il lire le contenu ?
+2. **Vérifier ce qu'on a** — Le frontmatter des documents suffit-il ou faut-il lire le contenu ?
 3. **Charger ce qui manque** — Lire uniquement les documents nécessaires, pas tout le projet
 4. **Douter de sa suffisance** — Si un doute existe sur le contexte ("est-ce qu'il y a une ADR sur ce sujet ? une règle métier que je n'ai pas lue ?"), charger le document en question plutôt que deviner
 
@@ -168,7 +159,7 @@ Le principe : **charger le minimum, mais ne jamais risquer de travailler avec un
 
 ## Contexte narratif du projet
 
-Le CLAUDE.md du projet (celui généré par `sync-claude-md`) doit inclure une section **Contexte narratif** qui raconte l'histoire du projet — pas sa structure, mais son parcours :
+Le CLAUDE.md du projet doit inclure une section **Contexte narratif** qui raconte l'histoire du projet — pas sa structure, mais son parcours :
 
 - D'où vient ce projet ? Quel problème résout-il ?
 - Quels choix structurants ont été faits et pourquoi ?
@@ -255,7 +246,7 @@ Ce qui n'est pas dans le dépôt n'existe pas.
 
 ### mgrep (plugin)
 
-Recherche améliorée, plus pertinente que ripgrep/grep. Disponible via le skill `/mgrep`.
+Recherche améliorée, plus pertinente que ripgrep/grep.
 
 - **Recherche locale** : `mgrep "pattern"` — cherche dans le codebase
 - **Recherche web** : `mgrep --web "sujet"` — cherche sur le web
