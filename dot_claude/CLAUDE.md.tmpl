@@ -183,6 +183,28 @@ Rien n'est implémenté sans spec. Rien n'est livré sans test qui prouve la con
 - **Refactor** — Nettoyer sans changer le comportement. Un tidying à la fois, pas en bloc.
 - **Review** — Revue humaine. Le code est relu par quelqu'un d'autre que son auteur.
 
+### Baby steps
+
+> « A succession of small, safe steps that enable to go from point A to point Z, without forgetting every steps between them. »
+
+Aller de A à Z par une succession de petits pas sûrs, sans en sauter aucun :
+- **Petit** — un pas = un seul changement, compréhensible d'un coup d'œil et réversible sans effort
+- **Sûr** — chaque pas laisse le système dans un état qui compile, passe les tests et reste livrable
+- **Vérifié** — on vérifie (test, build, relecture) avant de passer au pas suivant ; un pas non vérifié n'est pas fait
+- **Explicite** — les étapes entre A et Z sont listées avant de partir ; aucune n'est oubliée ni fusionnée en silence avec sa voisine
+
+Si un pas casse quelque chose, on revient au dernier état sûr et on raccourcit le pas. Un LLM est tenté de sauter de A à Z en une seule génération : c'est précisément ce qu'on refuse.
+
+### Un test vérifie l'intention, pas l'implémentation
+
+La couverture dit qu'une ligne a été exécutée, pas qu'elle a été vérifiée. Un bon test se juge contre la **spec**, pas contre le code :
+- **Il échoue** si une règle de la spec (AC, BR, y compris les « ne doit pas ») est violée
+- **Il passe encore** si le code est réécrit autrement mais correctement
+
+Deux familles d'assertions sont suspectes : celles qui vérifient le **comment** (mocks internes, ordre des appels, état interne) et celles qui vérifient **ce que le code fait** (oracle recopié depuis la sortie, snapshot non justifié, attendu calculé avec la même formule que le code).
+
+Pour juger un test, se demander : quelle implémentation plausiblement fausse le ferait échouer ? Quelle réécriture correcte le ferait échouer à tort ? L'expected se dérive de la spec, jamais de l'implémentation.
+
 ---
 
 ## Versionnement
