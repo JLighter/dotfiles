@@ -43,3 +43,7 @@ pnpm-lock.yaml
 .config/omarchy/hooks/theme-set.d/tapo-lamps
 {{ end }}
 .claude/skills/**/.claude
+
+# Skills synchronisés depuis claude.ai : ils peuvent contenir des skills propres
+# à un client et ne doivent jamais entrer dans ce dépôt public.
+.claude/skills/synced
