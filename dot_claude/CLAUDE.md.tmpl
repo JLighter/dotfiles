@@ -5,7 +5,7 @@
 
 Ce fichier est la fondation universelle du projet. Il est chargé par toutes les conversations, tous les agents et tous les sub-agents. Les principes ici sont **non-négociables**.
 
-## Langue
+## Langue{{/* Couche 1 */}}
 
 Toujours répondre en français. Les termes techniques et identifiants de code restent dans leur forme originale.
 
@@ -13,19 +13,19 @@ Toujours répondre en français. Les termes techniques et identifiants de code r
 
 ## Principes fondamentaux
 
-### Obligation de maîtrise
+### Obligation de maîtrise{{/* Couche 1 */}}
 
 Ce que tu produis, tu dois pouvoir l'expliquer — ligne par ligne, décision par décision. Si tu ne peux pas l'expliquer, tu ne le livres pas. Ce qui est retenu d'une suggestion LLM devient la décision de celui qui la retient.
 
-### Doute par défaut
+### Doute par défaut{{/* Couche 1 */}}
 
 Toute sortie d'un LLM est un brouillon à vérifier. Un résultat plausible n'est pas un résultat correct. Un outil qui confirme une intuition ne la valide pas.
 
-### Comprendre avant de produire
+### Comprendre avant de produire{{/* Couche 1 */}}
 
 Lire le contexte existant (specs, ADR, glossaire, conventions) avant de générer quoi que ce soit. Si le contexte manque, le demander — ne pas combler les trous avec des hypothèses silencieuses.
 
-### Negative space
+### Negative space{{/* Couche 1 et 4 */}}
 
 Définir ce que le système ne doit PAS faire avec autant de rigueur que ce qu'il doit faire :
 - Tests négatifs pour chaque test positif
@@ -33,11 +33,11 @@ Définir ce que le système ne doit PAS faire avec autant de rigueur que ce qu'i
 - Scénarios Gherkin "Then [ce qui ne doit PAS arriver]"
 - Policies as code pour l'infrastructure
 
-### Vocabulaire du domaine
+### Vocabulaire du domaine{{/* Couche 1 */}}
 
 Utiliser les termes du glossaire du projet (`docs/domain/glossary.md` ou équivalent) partout : code, tests, documentation, conversations. Un terme ambigu est un bug de communication. Pas de synonymes non déclarés.
 
-### Traçabilité
+### Traçabilité{{/* Couche 1 - 4 */}}
 
 Tout livrable est rattachable à sa source :
 - Code → test → AC → story → règle métier
@@ -49,15 +49,15 @@ Tout livrable est rattachable à sa source :
 
 ## Principes de design
 
-### KISS — Keep It Simple, Stupid
+### KISS — Keep It Simple, Stupid{{/* Couche 1 */}}
 
 La solution la plus simple qui répond au besoin est la meilleure. La complexité est un coût, pas une vertu. Si un CRUD suffit, ne fais pas d'event sourcing. Si un monolithe suffit, ne fais pas de microservices.
 
-### YAGNI — You Ain't Gonna Need It
+### YAGNI — You Ain't Gonna Need It{{/* Couche 1 */}}
 
 Ne construis pas pour des besoins hypothétiques. Trois lignes de code similaires valent mieux qu'une abstraction prématurée. N'ajoute pas de configurabilité, de feature flags ou de couches d'abstraction "au cas où". Le bon moment pour généraliser, c'est quand le besoin est réel — pas avant.
 
-### SOLID
+### SOLID{{/* Couche 1 */}}
 
 **S — Single Responsibility Principle.** Une classe, un module, une fonction a une seule raison de changer. Si tu dois utiliser "et" pour décrire ce qu'il fait, découpe.
 
@@ -69,7 +69,7 @@ Ne construis pas pour des besoins hypothétiques. Trois lignes de code similaire
 
 **D — Dependency Inversion Principle.** Les modules de haut niveau ne dépendent pas des modules de bas niveau — les deux dépendent d'abstractions. Le métier ne dépend pas de l'infrastructure.
 
-### Réversibilité
+### Réversibilité{{/* Couche 1 */}}
 
 À options équivalentes, préférer celle qu'on peut défaire. Un choix irréversible nécessite une justification proportionnelle au risque, documentée dans une ADR.
 
@@ -77,11 +77,11 @@ Ne construis pas pour des besoins hypothétiques. Trois lignes de code similaire
 
 ## Principes Tidy First (Kent Beck)
 
-### Séparer comportement et structure
+### Séparer comportement et structure{{/* Couche 1 */}}
 
 Un changement de **comportement** (ce que le code fait) et un changement de **structure** (comment il est organisé) ne sont **jamais** dans le même commit. Cela permet de relire, reverter et comprendre chaque changement indépendamment.
 
-### Tidy First, Tidy After, Tidy Later, Never
+### Tidy First, Tidy After, Tidy Later, Never{{/* Couche 1 */}}
 
 Face à du code désordonné, quatre options — chacune est un choix conscient, pas un réflexe :
 - **Tidy First** — ranger AVANT de changer le comportement, quand le désordre gêne la compréhension
@@ -91,15 +91,15 @@ Face à du code désordonné, quatre options — chacune est un choix conscient,
 
 Un LLM propose volontiers des refactorings massifs en une passe. Préférer les **micro-nettoyages** (tidyings) : petits, séparés, réversibles. Chaque tidying est un geste de quelques lignes — aligner le nommage, extraire un guard clause, supprimer du code mort.
 
-### Couplage = multiplicateur de coût
+### Couplage = multiplicateur de coût{{/* Couche 1 */}}
 
 Le coût d'un changement logiciel = coût du changement × coût du couplage. Réduire le couplage réduit le coût de tous les changements futurs. Chaque dépendance ajoutée est un multiplicateur de coût — la justifier.
 
-### Cohésion = ce qui change ensemble vit ensemble
+### Cohésion = ce qui change ensemble vit ensemble{{/* Couche 1 */}}
 
 Les éléments qui changent ensemble devraient vivre ensemble. Ce n'est pas un principe esthétique — c'est une optimisation économique : moins de fichiers touchés par changement = moins de risque.
 
-### Le design est un investissement en options
+### Le design est un investissement en options{{/* Couche 1 */}}
 
 Ranger le code crée de la **valeur d'option** — ça ne rapporte pas immédiatement, mais ça réduit le coût des changements futurs. L'excès de design (over-engineering) est un investissement sans retour probable. Le bon design maximise les options futures au moindre coût présent.
 
@@ -107,7 +107,7 @@ Ranger le code crée de la **valeur d'option** — ça ne rapporte pas immédiat
 
 ## Évaluation, planification et chargement de contexte
 
-### Classification de risque
+### Classification de risque{{/* Couche 1 */}}
 
 Avant chaque tâche d'écriture (code, IaC, documentation structurante), évaluer le niveau de risque :
 
@@ -119,7 +119,7 @@ Avant chaque tâche d'écriture (code, IaC, documentation structurante), évalue
 
 L'orchestrateur tague le risque quand il délègue. Le sub-agent peut réévaluer à la hausse (jamais à la baisse sans justification).
 
-### Mode planification
+### Mode planification{{/* Couche 1/3 */}}
 
 Sur les tâches **HIGH** ou quand le sub-agent juge la complexité élevée, il **propose un plan avant d'exécuter** :
 
@@ -138,7 +138,7 @@ Sur les tâches **HIGH** ou quand le sub-agent juge la complexité élevée, il 
 
 Le sub-agent n'exécute qu'après validation. Sur les tâches LOW, pas de plan — exécution directe.
 
-### Chargement de contexte adaptatif
+### Chargement de contexte adaptatif{{/* Couche 1 / 2 / 3 */}}
 
 Un agent ne charge **pas tout le contexte disponible** — il évalue ce dont il a besoin pour la tâche :
 
