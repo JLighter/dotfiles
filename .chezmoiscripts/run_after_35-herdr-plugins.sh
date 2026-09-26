@@ -35,3 +35,12 @@ install_if_missing paulbkim-dev/vim-herdr-navigation vim-herdr-navigation
 install_if_missing JLighter/herdr-spawn herdr-spawn
 install_if_missing kryptamine/herdr-auto-title herdr.auto-title
 install_if_missing edmundmiller/herdr-plugin-hunk hunk.diff
+
+# Hook d'etat des agents Claude : settings.json l'appelle par son chemin,
+# herdr l'ecrit. Reinstalle seulement s'il manque ou date d'une autre version.
+if herdr integration status 2>/dev/null | grep -q '^claude: current '; then
+    log "integration claude a jour"
+else
+    log "Installation de l'integration claude"
+    herdr integration install claude || log "integration claude echouee, a rejouer"
+fi
