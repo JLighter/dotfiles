@@ -58,3 +58,17 @@ else
     log "Installation de l'integration claude"
     herdr integration install claude || log "integration claude echouee, a rejouer"
 fi
+
+# Skill herdr : `herdr --skill` en est la source, et suit donc la version du
+# binaire. Remplace le lien vers ~/.agents/skills/herdr pose par `npx skills`,
+# fige a la version du jour de l'installation.
+skill_dir="$HOME/.claude/skills/herdr"
+[ -L "$skill_dir" ] && rm "$skill_dir"
+mkdir -p "$skill_dir"
+if herdr --skill > "$skill_dir/SKILL.md.tmp"; then
+    mv "$skill_dir/SKILL.md.tmp" "$skill_dir/SKILL.md"
+    log "skill herdr a jour"
+else
+    rm -f "$skill_dir/SKILL.md.tmp"
+    log "skill herdr : generation echouee, a rejouer"
+fi
