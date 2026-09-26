@@ -18,25 +18,21 @@ You interview the user until you both share the same understanding of the plan. 
 
 ## The interview: a design tree worked in rounds
 
-Map the plan as a **design tree**: each decision branches into the decisions that hang off it. The **frontier** is every decision whose prerequisites are settled. Ask the whole frontier in one round, numbered, then wait. A question that depends on another open question of the same round belongs to a later round.
+Map the plan as a **design tree**: each decision branches into the decisions that hang off it. The **frontier** is every decision whose prerequisites are settled. Ask the whole frontier in one round, then wait. A question that depends on another open question of the same round belongs to a later round.
+
+**Every question goes through the `AskUserQuestion` tool, never as plain text.** No exceptions: frontier questions, contradictions with the code, requests for a business reason, the end-of-session confirmation. Plain text is only for the round brief, write announcements and the end-of-session summary.
+
+- One call holds at most 4 questions. If the frontier has more, chain several calls in the same round (Q1–Q4, then Q5–Q8…), without waiting for a new round.
+- `header`: the question number and a short title (≤ 12 chars), e.g. `Q3 Annul.`.
+- `question`: starts with the tag, e.g. `[métier] Une commande partiellement livrée peut-elle être annulée ?`.
+- 2 to 4 options per question, each with the consequence in its `description`. Even for an open question, propose 2–4 plausible answers: the user can always answer with "Other".
+- `multiSelect: true` only when the answers are not mutually exclusive.
 
 Tag each question **[métier]** or **[technique]**:
-- **[technique]**: give your recommended answer.
-- **[métier]**: give the options and their consequences, **no recommendation**. Arbitrating a business trade-off is never yours.
+- **[technique]**: put your recommended option first, its label suffixed with `(Recommandé)`, and the one-line why in its `description`.
+- **[métier]**: options and their consequences, **no recommendation**: no `(Recommandé)` label, neutral order. Arbitrating a business trade-off is never yours.
 
-```
-❓ **Q1** [technique] - **<title>**: <body, options if any>
-
-➡️ Recommandation : <answer + one-line why>
-
----
-
-❓ **Q2** [métier] - **<title>**: <body>
-
-⚖️ Options : A → <consequence> · B → <consequence>
-```
-
-Facts are your job, never the user's. When a question needs a fact (code, config, existing doc), look it up or dispatch a sub-agent; only questions downstream of a pending lookup wait. When the user states how something works, check the code: surface any contradiction ("le code annule la commande entière, tu dis que l'annulation partielle existe : lequel est vrai ?").
+Facts are your job, never the user's. When a question needs a fact (code, config, existing doc), look it up or dispatch a sub-agent; only questions downstream of a pending lookup wait. When the user states how something works, check the code: surface any contradiction as an `AskUserQuestion` ("le code annule la commande entière, tu dis que l'annulation partielle existe : lequel est vrai ?", one option per version).
 
 ### Question families to cover on every branch
 
@@ -85,6 +81,6 @@ The session ends when the frontier is empty: every branch visited, nothing silen
 5. **Reste ouvert**: unanswered questions, ADRs to take to `/adr`, contradictions found with code or docs.
 6. **Baby steps A → Z**: ordered small steps, each tagged `[structure]` or `[comportement]` (never both), each leaving the system shippable.
 
-Do not act on it until the user confirms the shared understanding. Suggest `/new-feature` to turn it into stories if relevant.
+Then ask for confirmation of the shared understanding with `AskUserQuestion` (e.g. options: confirmée / à corriger / reprendre une branche). Do not act on it until the user confirms. Suggest `/new-feature` to turn it into stories if relevant.
 
 $ARGUMENTS
