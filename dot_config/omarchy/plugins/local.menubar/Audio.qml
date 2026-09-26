@@ -519,13 +519,20 @@ BarWidget {
     }
   }
 
-  WidgetButton {
+  // `BarIconButton` plutot que `WidgetButton` : le glyphe de volume change avec
+  // le niveau, et chaque variante porte son propre bearing. Le shell mesure
+  // l'encre et recentre, la ou un `WidgetButton` poserait la boite telle quelle
+  // — ce qui decalait ce bouton par rapport a ses voisins de l'ilot.
+  // `fontSize` reste celle de la barre, `BarIconButton` visant autrement la
+  // taille d'icone du shell, d'un point plus grande.
+  BarIconButton {
     id: button
 
     x: root.vertical ? 0 : gauge.width
     y: root.vertical ? gauge.height : 0
     bar: root.bar
     text: root.outputIcon()
+    fontSize: Style.font.body
     tooltipText: root.outputMuted ? "Muted" : "Volume " + Math.round(root.outputVolume * 100) + "%"
     fixedWidth: root.vertical ? root.islandSize : Math.max(Style.space(24), root.islandRadius * 2)
     fixedHeight: root.islandSize

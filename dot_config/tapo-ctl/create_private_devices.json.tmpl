@@ -1,0 +1,49 @@
+{{- /* Inventaire des ampoules Tapo. GRAINE INITIALE, pas fichier maitre.
+
+       Prefixe `create_` : chezmoi depose ce fichier s'il est absent, puis n'y
+       touche plus jamais. C'est indispensable ici, car `tapo-ctl role` reecrit
+       devices.json quand on change la couleur d'une lampe depuis le panneau du
+       widget — un template ordinaire ecraserait ces reglages a chaque `apply`.
+       Pour repartir de zero : supprimer le fichier et relancer `chezmoi apply`.
+
+       Ce qui est PERSONNEL mais pas secret (noms des lampes, modeles, role de
+       couleur, parametres de protocole) vit dans le depot : ce sont des
+       preferences, elles doivent suivre d'une machine a l'autre.
+
+       Ce qui depend du RESEAU ou du COMPTE (email, adresses IP) est demande au
+       premier `chezmoi init` et memorise dans ~/.config/chezmoi/chezmoi.toml.
+       Une reponse vide desactive proprement la lampe concernee : `tapo-ctl`
+       respecte le champ `enabled` et signale les lampes inactives au lieu de
+       tenter une connexion vers une adresse absente.
+
+       Le mot de passe n'apparait ni ici ni dans chezmoi.toml : il est range
+       dans le trousseau par .chezmoiscripts/run_once_after_60-tapo.sh. */ -}}
+{{- /* `dig` plutot qu'un acces direct : sur une machine dont le chezmoi.toml
+       date d'avant ces questions, la section [data.tapo] n'existe pas encore
+       et `.tapo.username` ferait echouer tout l'`apply`. */ -}}
+{{- $user := dig "tapo" "username" "" . -}}
+{{- $lamps := list
+      (dict "key" "meuble" "host" (dig "tapo" "meuble" "" .) "model" "L430C" "alias" "Petit lampe meuble")
+      (dict "key" "bureau" "host" (dig "tapo" "bureau" "" .) "model" "L530"  "alias" "Lampe bureau")
+      (dict "key" "tv"     "host" (dig "tapo" "tv"     "" .) "model" "L530"  "alias" "Ampoule television")
+-}}
+{
+  "username": {{ if $user }}{{ $user | quote }}{{ else }}"REMPLACER-PAR-TON-EMAIL-TAPO"{{ end }},
+  "_note": "Protocole mesure par diagnose.py le 2026-08-10, pas devine. theme_color = role de couleur dans la palette Omarchy (voir `tapo-ctl palette`), applique aux lampes allumees a chaque changement de theme via le hook theme-set.d/tapo-lamps. Mettre null pour qu'une lampe ne suive pas le theme. Les adresses IP viennent de `chezmoi init` : relance `chezmoi init` pour les corriger.",
+  "devices": {
+{{- range $i, $lamp := $lamps }}
+    {{ if $i }},{{ end }}{{ $lamp.key | quote }}: {
+      "host": {{ $lamp.host | quote }},
+      "model": {{ $lamp.model | quote }},
+      "family": "SMART.TAPOBULB",
+      "encryption": "KLAP",
+      "login_version": 2,
+      "https": false,
+      "port": 80,
+      "enabled": {{ if and $user $lamp.host }}true{{ else }}false{{ end }},
+      "_alias_tapo": {{ $lamp.alias | quote }},
+      "theme_color": "red"
+    }
+{{- end }}
+  }
+}

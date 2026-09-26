@@ -25,10 +25,21 @@ pnpm-lock.yaml
 {{ if ne .chezmoi.os "linux" }}
 # ── Omarchy / Linux uniquement ───────────────────────────────────────────────
 # Overrides Hyprland & co : ne doivent jamais être déployés sur macOS.
+# waybar / walker / mako ont disparu avec le passage au shell Quickshell : les
+# lignes correspondantes ont été retirées plutôt que gardées « au cas où ».
 .config/hypr
-.config/waybar
-.config/walker
-.config/mako
 .config/omarchy
+.config/tapo-ctl
+.local/bin/tapo-ctl
+{{ end }}
+
+{{ if not (dig "tapo" "username" "" .) }}
+# ── Domotique Tapo ───────────────────────────────────────────────────────────
+# Aucun compte Tapo renseigne au `chezmoi init` : rien de la domotique n'est
+# depose. Le widget Tapo.qml, lui, reste deploye — Bar.qml l'instancie en dur —
+# mais il se retire de lui-meme de la barre tant que `tapo-ctl` est absent.
+.config/tapo-ctl
+.local/bin/tapo-ctl
+.config/omarchy/hooks/theme-set.d/tapo-lamps
 {{ end }}
 .claude/skills/**/.claude

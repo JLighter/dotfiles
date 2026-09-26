@@ -49,6 +49,27 @@ for hwmon in /sys/class/hwmon/hwmon*; do
   printf 'temp\t%s\t%s\n' "$(cat "$hwmon/name")" "$(cat "$hwmon/temp1_input")"
 done
 
+# gpuname <modele>
+# gpu <charge%> <vram_utilisee_mio> <vram_totale_mio> <temperature_c> <conso_w>
+#     <limite_w> <horloge_mhz> <ventilateur%>
+#
+# Le pilote NVIDIA proprietaire n'expose aucune telemetrie dans /sys : contrairement
+# aux cartes AMD et leur gpu_busy_percent, tout passe par nvidia-smi, qui parle au
+# driver via /dev/nvidiactl. C'est le seul fork evitable de ce script, d'ou le garde
+# command -v : sur une machine sans NVIDIA rien n'est lance et le widget masque la
+# section. Les champs que la carte ne renseigne pas ressortent a [N/A] ; on les
+# normalise en -1, charge au widget de les taire.
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi \
+    --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit,clocks.gr,fan.speed \
+    --format=csv,noheader,nounits 2>/dev/null |
+    awk -F' *, *' 'NR == 1 && NF >= 9 {
+      printf "gpuname\t%s\n", $1
+      for (i = 2; i <= 9; i++) if ($i !~ /^[0-9]+(\.[0-9]+)?$/) $i = -1
+      printf "gpu\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", $2, $3, $4, $5, $6, $7, $8, $9
+    }'
+fi
+
 # topcpu / topmem <pourcent_cpu> <pourcent_mem> <commande>
 ps -eo pcpu=,pmem=,comm= --sort=-pcpu 2>/dev/null | head -5 |
   awk 'NF >= 3 { printf "topcpu\t%s\t%s\t%s\n", $1, $2, $3 }'

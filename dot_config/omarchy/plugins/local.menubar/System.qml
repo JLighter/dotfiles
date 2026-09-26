@@ -48,6 +48,10 @@ BarWidget {
   // Au-dela de ce seuil, la mesure passe en accent.
   readonly property int alertThreshold: 80
 
+  // Le GPU a son propre seuil thermique : une carte a 100 % de charge pendant un
+  // rendu est normale, une carte a 80 °C ne l'est pas. Les deux conditions comptent.
+  readonly property int gpuTempAlertThreshold: 80
+
   // --- Etat ------------------------------------------------------------------
 
   property real cpuPercent: 0
@@ -62,8 +66,25 @@ BarWidget {
   property var topCpu: []
   property var topMem: []
 
+  property string gpuName: ""
+  property real gpuPercent: -1
+  property real gpuVramUsedMib: 0
+  property real gpuVramTotalMib: 0
+  property real gpuCelsius: -1
+  property real gpuWatts: -1
+  property real gpuWattsLimit: -1
+  property real gpuClockMhz: -1
+  property real gpuFanPercent: -1
+
   readonly property real memPercent: memTotalKib > 0 ? memUsedKib / memTotalKib * 100 : 0
   readonly property real swapPercent: swapTotalKib > 0 ? swapUsedKib / swapTotalKib * 100 : 0
+
+  // La charge est le seul champ que toute carte NVIDIA renseigne : sa presence
+  // sert de test d'existence pour l'ensemble de la section.
+  readonly property bool gpuAvailable: gpuPercent >= 0
+  readonly property real gpuVramPercent: gpuVramTotalMib > 0 ? gpuVramUsedMib / gpuVramTotalMib * 100 : 0
+  readonly property bool gpuAlert: gpuAvailable
+    && (gpuPercent >= alertThreshold || gpuCelsius >= gpuTempAlertThreshold)
 
   // Releve precedent, pour les differences de compteurs CPU.
   property real prevCpuIdle: -1
@@ -86,6 +107,7 @@ BarWidget {
     var nextTemps = []
     var nextTopCpu = []
     var nextTopMem = []
+    var sawGpu = false
     var lines = String(raw || "").split("\n")
 
     for (var i = 0; i < lines.length; i++) {
@@ -117,6 +139,18 @@ BarWidget {
         loadAverages = [parts[1], parts[2], parts[3]]
       } else if (key === "uptime" && parts.length >= 2) {
         uptimeSeconds = Number(parts[1])
+      } else if (key === "gpuname" && parts.length >= 2) {
+        gpuName = parts[1]
+      } else if (key === "gpu" && parts.length >= 9) {
+        gpuPercent = Number(parts[1])
+        gpuVramUsedMib = Number(parts[2])
+        gpuVramTotalMib = Number(parts[3])
+        gpuCelsius = Number(parts[4])
+        gpuWatts = Number(parts[5])
+        gpuWattsLimit = Number(parts[6])
+        gpuClockMhz = Number(parts[7])
+        gpuFanPercent = Number(parts[8])
+        sawGpu = true
       } else if (key === "temp" && parts.length >= 3) {
         nextTemps.push({ label: parts[1], celsius: Number(parts[2]) / 1000 })
       } else if (key === "topcpu" && parts.length >= 4) {
@@ -133,6 +167,13 @@ BarWidget {
     temperatures = nextTemps
     topCpu = nextTopCpu
     topMem = nextTopMem
+
+    // Un pilote qui tombe, ou une carte debranchee a chaud : sans cette remise a
+    // zero le widget continuerait d'afficher le dernier releve comme s'il etait vif.
+    if (!sawGpu) {
+      gpuPercent = -1
+      gpuName = ""
+    }
   }
 
   Process {
@@ -175,6 +216,18 @@ BarWidget {
     return minutes + " min"
   }
 
+  // nvidia-smi rend la VRAM en mebioctets, la memoire systeme arrive en kibioctets.
+  function formatMib(mib) {
+    return formatGib(Number(mib || 0) * 1024)
+  }
+
+  // Les champs qu'une carte ne renseigne pas valent -1 : on les affiche en tiret
+  // plutot que de laisser passer un « -1 W » qui ressemblerait a une mesure.
+  function formatOptional(value, suffix, decimals) {
+    if (Number(value) < 0) return "—"
+    return Number(value).toFixed(decimals === undefined ? 0 : decimals) + suffix
+  }
+
   function alertColorFor(percent) {
     return Number(percent || 0) >= root.alertThreshold ? root.accentColor : root.foregroundColor
   }
@@ -184,6 +237,7 @@ BarWidget {
   readonly property string glyphMemory: "󰍛"
   readonly property string glyphTemperature: "󰔏"
   readonly property string glyphLoad: "󰓅"
+  readonly property string glyphGpu: "󰢮"
 
   // --- Ouverture -------------------------------------------------------------
 
@@ -240,8 +294,10 @@ BarWidget {
     NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
   }
 
-  // L'ensemble passe en accent des qu'une des deux mesures s'emballe.
-  readonly property color readingColor: cpuPercent >= alertThreshold || memPercent >= alertThreshold
+  // L'ensemble passe en accent des qu'une des mesures s'emballe.
+  readonly property color readingColor: cpuPercent >= alertThreshold
+      || memPercent >= alertThreshold
+      || gpuAlert
     ? accentColor
     : foregroundColor
 
@@ -293,7 +349,21 @@ BarWidget {
       id: valuesLabel
 
       x: root.contentGap
-      text: Math.round(root.cpuPercent) + "%  " + root.glyphMemory + " " + Math.round(root.memPercent) + "%"
+
+      // Le premier pourcentage n'a pas de glyphe : il revient a la puce centree
+      // dans l'ilot, a gauche. Les suivants portent le leur.
+      text: {
+        var reading = Math.round(root.cpuPercent) + "%"
+          + "  " + root.glyphMemory + " " + Math.round(root.memPercent) + "%"
+
+        if (root.gpuAvailable) {
+          reading += "  " + root.glyphGpu + " " + Math.round(root.gpuPercent) + "%"
+            + "  " + root.glyphMemory + " " + Math.round(root.gpuVramPercent) + "%"
+        }
+
+        return reading
+      }
+
       color: root.readingColor
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
@@ -480,6 +550,65 @@ BarWidget {
                   }
                 }
               }
+            }
+          }
+
+          // ---- Carte graphique ----
+          PanelIsland {
+            visible: root.gpuAvailable
+
+            SectionHeader {
+              text: "GPU"
+              value: Math.round(root.gpuPercent) + "%"
+              alert: root.gpuAlert
+            }
+
+            // Le modele en sous-titre plutot qu'en ligne de detail : « NVIDIA
+            // GeForce RTX 3070 » deborderait la colonne de droite, etroite.
+            Text {
+              width: parent.width
+              text: root.gpuName
+              visible: text !== ""
+              color: root.mutedColor
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+            }
+
+            Gauge { value: root.gpuPercent }
+
+            DetailRow {
+              label: "VRAM"
+              value: root.gpuVramTotalMib > 0
+                ? root.formatMib(root.gpuVramUsedMib) + " / " + root.formatMib(root.gpuVramTotalMib)
+                : "—"
+            }
+
+            Gauge { value: root.gpuVramPercent }
+
+            DetailRow {
+              label: "Temperature"
+              value: root.formatOptional(root.gpuCelsius, " °C")
+            }
+
+            DetailRow {
+              label: "Power"
+              visible: root.gpuWatts >= 0
+              value: root.gpuWattsLimit >= 0
+                ? root.formatOptional(root.gpuWatts, " W") + " / " + root.formatOptional(root.gpuWattsLimit, " W")
+                : root.formatOptional(root.gpuWatts, " W")
+            }
+
+            DetailRow {
+              label: "Clock"
+              visible: root.gpuClockMhz >= 0
+              value: root.formatOptional(root.gpuClockMhz, " MHz")
+            }
+
+            DetailRow {
+              label: "Fan"
+              visible: root.gpuFanPercent >= 0
+              value: root.formatOptional(root.gpuFanPercent, "%")
             }
           }
 

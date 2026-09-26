@@ -36,6 +36,43 @@ Item {
   readonly property bool vertical: position === "left" || position === "right"
   readonly property bool transparent: Util.isPlainObject(barConfig) && barConfig.transparent === true
 
+  // --- Ecran principal --------------------------------------------------------
+  // Un seul ecran porte la barre complete ; les autres se limitent a leurs
+  // workspaces, qui sont la seule chose dont le contenu differe d'un ecran a
+  // l'autre. Le choix se fait depuis le panneau Displays et vit dans
+  // `bar.primaryScreen` de shell.json.
+
+  readonly property string configuredPrimaryScreen:
+    Util.isPlainObject(barConfig) ? String(barConfig.primaryScreen || "") : ""
+
+  // Un ecran debranche ou jamais choisi ne doit pas laisser la session sans
+  // barre complete : a defaut de correspondance, le premier ecran reprend le
+  // role sans que le reglage enregistre soit efface pour autant — rebrancher
+  // l'ecran nomme le lui rend.
+  readonly property string primaryScreen: {
+    var screens = Quickshell.screens
+    if (screens.length === 0) return ""
+
+    for (var i = 0; i < screens.length; i++) {
+      if (screens[i].name === configuredPrimaryScreen) return configuredPrimaryScreen
+    }
+
+    return screens[0].name
+  }
+
+  // Ecrit le choix dans shell.json via le host, qui reinjecte ensuite `barConfig`
+  // ici : la barre se redessine sans avoir a se relire elle-meme.
+  function setPrimaryScreen(name) {
+    var target = String(name || "")
+    if (target === "" || target === configuredPrimaryScreen) return
+    if (!shell || typeof shell.mutateShellConfig !== "function") return
+
+    shell.mutateShellConfig(function(config) {
+      if (!Util.isPlainObject(config.bar)) config.bar = {}
+      config.bar.primaryScreen = target
+    })
+  }
+
   // Geometrie des ilots. `barSize` reste la hauteur reelle de la surface, celle
   // que les autres plugins lisent pour ne pas s'afficher dessous ; les widgets
   // se dimensionnent sur `islandSize`, plus petit de l'air laisse autour.
@@ -75,18 +112,21 @@ Item {
   Behavior on barForeground { ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
 
   // Lance une commande sur le workspace actif, sans attendre son resultat.
+  //
+  // `Util.hyprExecCommand`, qui construisait la ligne a passer a un `Process`,
+  // a disparu en 4.0 au profit de `Util.execDetached`, qui lance la commande
+  // lui-meme sous `bash -lc`. Le `Process` local n'a donc plus lieu d'etre — et
+  // tant que cet appel restait, `run()` levait a chaque geste, ce qui rendait
+  // muets tous les clics qui lancent quelque chose : workspaces en tete.
   function run(command) {
     if (!command) return
 
-    launcher.command = Util.hyprExecCommand(command)
-    launcher.startDetached()
+    Util.execDetached(command)
   }
 
   function shellQuote(value) {
     return Util.shellQuote(value)
   }
-
-  Process { id: launcher }
 
   // --- Coordination des popups -----------------------------------------------
   // Un seul panneau ouvert a la fois : en ouvrir un ferme celui qui l'etait.
@@ -206,6 +246,9 @@ Item {
 
         required property var modelData
 
+        // Seule la barre de l'ecran principal monte la totalite des widgets.
+        readonly property bool isPrimary: !!modelData && modelData.name === root.primaryScreen
+
         screen: modelData
         visible: !root.barHidden
         // La surface ne peint rien : seuls les ilots ont un fond.
@@ -227,7 +270,33 @@ Item {
 
         Loader {
           anchors.fill: parent
-          sourceComponent: root.vertical ? verticalLayout : horizontalLayout
+          sourceComponent: {
+            if (!barWindow.isPrimary) return workspacesOnlyLayout
+            return root.vertical ? verticalLayout : horizontalLayout
+          }
+        }
+
+        // Ecran secondaire : ses workspaces, rien d'autre. Ce n'est pas un
+        // masquage — les widgets ne sont pas instancies du tout, et leurs sondes
+        // (stats systeme, quota Claude, mises a jour, reseau) ne tournent donc
+        // qu'en un seul exemplaire au lieu d'un par ecran.
+        //
+        // Une seule disposition pour les deux orientations : il n'y a qu'un ilot
+        // a placer, on le pose au bord de depart et on le centre dans l'autre
+        // axe plutot que d'ecrire deux fois la meme chose.
+        Component {
+          id: workspacesOnlyLayout
+
+          Item {
+            anchors.fill: parent
+
+            Island {
+              x: root.vertical ? Math.round((parent.width - width) / 2) : root.edgeMargin
+              y: root.vertical ? root.edgeMargin : Math.round((parent.height - height) / 2)
+
+              Workspaces { bar: root; barScreen: barWindow.screen }
+            }
+          }
         }
 
         Component {
@@ -268,6 +337,15 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               spacing: root.islandGap
 
+              // S'efface entierement quand aucune application ne tient d'icone
+              // en arriere-plan : `Row` ignore les enfants invisibles, jusque
+              // dans son espacement.
+              Island {
+                visible: trayWidget.visible
+
+                Tray { id: trayWidget; bar: root }
+              }
+
               Island {
                 Cliamp { bar: root }
               }
@@ -276,11 +354,20 @@ Item {
 
               Island { ClaudeUsage { bar: root } }
 
-              // Reseau et son partagent une seule pastille : ce sont deux
-              // reglages systeme voisins, et la jauge de volume s'y deplie.
+              Island { Notifications { bar: root } }
+
+              Island { Tapo { bar: root } }
+
+              // Dictee, ecrans, reseau et son partagent une seule pastille : ce
+              // sont quatre reglages systeme voisins, et la jauge de volume
+              // comme la waveform de dictee s'y deplient.
               Island {
                 Row {
                   spacing: 0
+
+                  Voxtype { bar: root }
+
+                  Displays { bar: root }
 
                   Network { bar: root }
 
@@ -326,6 +413,12 @@ Item {
               spacing: root.islandGap
 
               Island {
+                visible: trayWidgetVertical.visible
+
+                Tray { id: trayWidgetVertical; bar: root }
+              }
+
+              Island {
                 Cliamp { bar: root }
               }
 
@@ -333,9 +426,17 @@ Item {
 
               Island { ClaudeUsage { bar: root } }
 
+              Island { Notifications { bar: root } }
+
+              Island { Tapo { bar: root } }
+
               Island {
                 Column {
                   spacing: 0
+
+                  Voxtype { bar: root }
+
+                  Displays { bar: root }
 
                   Network { bar: root }
 

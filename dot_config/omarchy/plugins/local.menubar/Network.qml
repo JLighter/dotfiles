@@ -107,6 +107,9 @@ BarWidget {
       uploadRate = 0
     }
 
+    var type = String(next.type || "")
+    appendPingSample(next.internet_ping_ms, type === "wifi" || type === "ethernet")
+
     prevIface = iface
     prevRxBytes = rx
     prevTxBytes = tx
@@ -133,6 +136,49 @@ BarWidget {
     return value >= 1000 ? (value / 1000) + " Gb/s" : value + " Mb/s"
   }
 
+  // --- Perte de paquets ------------------------------------------------------
+  // `omarchy-network-status` ne rapporte qu'une latence par releve : un ping
+  // perdu s'y lit comme une valeur absente, jamais comme un compteur. On garde
+  // donc une fenetre glissante des derniers releves et on compte ceux qui n'ont
+  // rien rapporte. Ce que la ligne mesure est donc la fiabilite du lien sur la
+  // duree de la fenetre — a la cadence rapide du panneau ouvert, la derniere
+  // demi-minute — et non un taux de perte instantane.
+
+  readonly property int pingSampleLimit: 20
+  property var pingSamples: []
+
+  // Hors ligne, il n'y a pas de perte a mesurer, seulement une absence de lien :
+  // echantillonner quand meme afficherait 100 % au retour du reseau, le temps
+  // que la fenetre se vide.
+  function appendPingSample(raw, connected) {
+    if (!connected) {
+      if (pingSamples.length > 0) pingSamples = []
+      return
+    }
+
+    var value = Number(raw)
+    var samples = pingSamples.slice()
+    samples.push(isFinite(value) && value > 0 ? value : -1)
+    while (samples.length > pingSampleLimit) samples.shift()
+    pingSamples = samples
+  }
+
+  readonly property real packetLossPercent: {
+    if (pingSamples.length === 0) return -1
+
+    var lost = 0
+    for (var i = 0; i < pingSamples.length; i++) {
+      if (pingSamples[i] < 0) lost++
+    }
+    return lost * 100 / pingSamples.length
+  }
+
+  function formatPacketLoss(percent) {
+    if (!isFinite(percent) || percent < 0) return "—"
+    if (percent === 0) return "0 %"
+    return (percent < 10 ? percent.toFixed(1) : String(Math.round(percent))) + " %"
+  }
+
   Process {
     id: detailsProc
 
@@ -155,6 +201,115 @@ BarWidget {
 
   Process { id: actionProc }
 
+  // --- Bande Wi-Fi -----------------------------------------------------------
+  // `omarchy-network-band` sans argument rend son etat sous la meme forme
+  // cle/valeur que le reste : `band` (celle en cours), `available` (celles que
+  // le point d'acces annonce, separees par des espaces) et `selected` (celle
+  // epinglee dans le profil, ou "auto").
+  //
+  // On epingle la bande et non un BSSID : le point d'acces peut faire tourner
+  // ses BSSID sans que le reglage cesse de valoir, et l'itinerance d'une borne a
+  // l'autre reste possible.
+
+  property string bandCurrent: ""
+  property string bandSelected: "auto"
+  property var bandAvailable: []
+  property string pendingBand: ""
+
+  // Sous Auto la rangee de pastilles est repliee ; ce drapeau la deplie a la
+  // demande. Il retombe a la fermeture du panneau : deplier est un geste de
+  // l'instant, pas un reglage qu'on retrouverait a la prochaine ouverture.
+  property bool bandPillsRevealed: false
+
+  readonly property bool bandBusy: pendingBand !== ""
+
+  // "auto" en tete, puis les bandes annoncees. Une bande epinglee mais absente
+  // de l'annonce reste offerte : sans cela sa pastille disparaitrait au moment
+  // meme ou l'on cherche a la quitter.
+  readonly property var bandOptions: {
+    var list = ["auto"]
+
+    for (var i = 0; i < bandAvailable.length; i++) {
+      if (list.indexOf(bandAvailable[i]) === -1) list.push(bandAvailable[i])
+    }
+    if (bandSelected !== "auto" && list.indexOf(bandSelected) === -1) list.push(bandSelected)
+
+    return list
+  }
+
+  // Rien a proposer tant qu'il n'y a qu'"auto" : un reseau filaire, ou un point
+  // d'acces mono-bande, n'a pas de choix a offrir.
+  readonly property bool bandOffered: linkType === "wifi" && bandOptions.length > 1
+
+  function bandLabel(band) {
+    if (band === "auto") return "Auto"
+    return band ? band + " GHz" : ""
+  }
+
+  // Sous Auto les pastilles sont masquees : c'est l'entete qui porte alors la
+  // bande reellement utilisee. Des qu'une bande est epinglee les pastilles le
+  // disent elles-memes, et l'entete redevient un simple intitule.
+  readonly property string bandSectionValue: {
+    if (bandSelected !== "auto") return ""
+
+    var label = bandLabel(bandCurrent)
+    return label === "" ? "" : label.toUpperCase()
+  }
+
+  function updateBand(raw) {
+    var next = parseKeyValue(raw)
+    var tokens = String(next.available || "").split(" ")
+    var available = []
+
+    for (var i = 0; i < tokens.length; i++) {
+      if (tokens[i] !== "") available.push(tokens[i])
+    }
+
+    // En pleine reassociation il n'y a plus de station connectee et la commande
+    // ne rapporte rien. Publier ce vide replierait la section a chaque bascule.
+    if (bandBusy && available.length === 0) return
+
+    bandCurrent = String(next.band || "")
+    bandSelected = String(next.selected || "auto")
+    bandAvailable = available
+  }
+
+  Process {
+    id: bandProc
+
+    command: ["omarchy-network-band"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.updateBand(text)
+    }
+  }
+
+  // Epingler une bande refait l'association. Le panneau reste ouvert a dessein :
+  // la reconnexion est precisement ce qu'on veut regarder, et les lignes de
+  // detail au-dessus la racontent au fur et a mesure.
+  //
+  // Processus distinct d'`actionProc`, que se partagent le DNS et les actions
+  // Wi-Fi : une bascule de bande dure le temps d'une reconnexion, et n'a pas a
+  // bloquer un changement de resolveur — ni a se faire ecraser par lui.
+  function setBand(band) {
+    if (!band || band === bandSelected || bandSetProc.running) return
+
+    pendingBand = band
+    bandSetProc.command = ["omarchy-network-band", band]
+    bandSetProc.running = true
+  }
+
+  Process {
+    id: bandSetProc
+
+    // Relire plutot que croire : la commande revient a la bande precedente si la
+    // nouvelle ne repond pas, et c'est elle qui a le dernier mot.
+    onExited: {
+      root.pendingBand = ""
+      if (!bandProc.running) bandProc.running = true
+    }
+  }
+
   // Releve rapide tant que les debits sont a l'ecran — panneau ouvert ou
   // simple survol — et lent le reste du temps, juste pour tenir l'icone a
   // jour. Sans cela, le survol montrerait un debit vieux de dix secondes.
@@ -169,6 +324,10 @@ BarWidget {
   function refresh(scanWifi) {
     if (!detailsProc.running) detailsProc.running = true
     if (!dnsProc.running) dnsProc.running = true
+
+    // La bande ne bouge qu'a la reassociation, et la relire coute un aller-retour
+    // nmcli : inutile de la sonder tant que personne ne regarde le panneau.
+    if (opened && !bandProc.running && !bandSetProc.running) bandProc.running = true
 
     if (wifiDevice) {
       if (scanWifi === true) {
@@ -225,6 +384,7 @@ BarWidget {
   // les rafraichissements pour ne pas escamoter la saisie en cours.
   property string passwordSsid: ""
   property string passwordText: ""
+  property bool passwordOpen: false
 
   function findDevice(type) {
     var devices = networkDevices
@@ -351,14 +511,21 @@ BarWidget {
     runNetworkAction("forget", row.network, function(net) { net.forget() })
   }
 
+  // `passwordOpen` double `passwordSsid` parce qu'un reseau a SSID masque porte
+  // la chaine vide, exactement comme le defaut de `passwordSsid` : comparer les
+  // deux seuls ouvrirait le champ de saisie sur la ligne cachee des l'ouverture
+  // du panneau. Les etats d'action et d'echec se gardent deja de la meme
+  // collision en exigeant leur `actionKind` / `failureReason`.
   function openPasswordPrompt(ssid) {
-    if (passwordSsid !== ssid) passwordText = ""
+    if (passwordSsid !== ssid || !passwordOpen) passwordText = ""
     passwordSsid = ssid
+    passwordOpen = true
   }
 
   function closePasswordPrompt() {
     passwordSsid = ""
     passwordText = ""
+    passwordOpen = false
   }
 
   // --- Test de debit ---------------------------------------------------------
@@ -498,6 +665,27 @@ BarWidget {
     close()
   }
 
+  // --- Partage par QR --------------------------------------------------------
+  // Le code QR est un panneau a part entiere (`omarchy.wifiqr`) : on le convoque
+  // avec l'interface et le SSID courants quand on les connait, et il se
+  // debrouille seul sinon. Le panneau se ferme d'abord — deux surfaces ouvertes
+  // se recouvriraient, et c'est le QR qu'on est venu voir.
+
+  readonly property bool canShareNetwork: linkType === "wifi" && String(info.iface || "") !== ""
+
+  function shareNetworkQr() {
+    if (!bar || !bar.shell || typeof bar.shell.summon !== "function") return
+
+    var payload = {}
+    if (canShareNetwork) {
+      payload.iface = String(info.iface)
+      if (info.ssid) payload.ssid = String(info.ssid)
+    }
+
+    close()
+    bar.shell.summon("omarchy.wifiqr", JSON.stringify(payload))
+  }
+
   // --- Glyphes ---------------------------------------------------------------
   // Memes codepoints Nerd Font que le widget natif.
 
@@ -534,6 +722,7 @@ BarWidget {
 
   function close() {
     opened = false
+    bandPillsRevealed = false
     closePasswordPrompt()
   }
 
@@ -581,9 +770,16 @@ BarWidget {
   property int cursor: 0
   property bool cursorActive: false
 
+  // L'ordre suit celui du panneau, pour que la fleche du bas descende bien la
+  // page. Les entrees qui ne s'affichent pas ne s'y inscrivent pas non plus :
+  // le curseur ne doit jamais s'arreter sur une pastille absente.
   readonly property var rows: {
     var list = []
     if (online) list.push({ kind: "speed", index: 0 })
+    if (canShareNetwork) list.push({ kind: "qr", index: 0 })
+    if (bandOffered) {
+      for (var b = 0; b < bandOptions.length; b++) list.push({ kind: "band", index: b })
+    }
     for (var i = 0; i < dnsProviders.length; i++) list.push({ kind: "dns", index: i })
     for (var j = 0; j < wifiRows.length; j++) list.push({ kind: "wifi", index: j })
     return list
@@ -605,6 +801,8 @@ BarWidget {
     if (!row) return
 
     if (row.kind === "speed") runSpeedTest()
+    else if (row.kind === "qr") shareNetworkQr()
+    else if (row.kind === "band") setBand(bandOptions[row.index])
     else if (row.kind === "dns") setDns(dnsProviders[row.index])
     else if (row.kind === "wifi") {
       var target = wifiRows[row.index]
@@ -654,21 +852,20 @@ BarWidget {
     }
   }
 
-  Text {
+  // L'encre du glyphe ne remplit pas sa boite symetriquement — celle de
+  // l'ethernet penche vers la droite. On corrigeait ce bearing d'un decalage
+  // constant ; `OpticalGlyph` le mesure a la place, et suit donc le glyphe
+  // affiche au lieu de supposer lequel c'est.
+  OpticalGlyph {
     id: glyphLabel
 
-    // L'encre du glyphe ethernet ne remplit pas sa boite symetriquement : elle
-    // penche vers la droite. On decale la boite d'autant, a l'echelle du theme
-    // comme le bearing qu'elle corrige.
-    x: root.contentGap - Style.spaceReal(1.5)
+    x: root.contentGap
     width: root.glyphWidth
+    height: parent.height
     text: root.connectionGlyph()
     color: root.online ? root.foregroundColor : root.mutedColor
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.body
-    renderType: Text.NativeRendering
-    horizontalAlignment: Text.AlignHCenter
-    anchors.verticalCenter: parent.verticalCenter
+    fontFamily: root.fontFamily
+    fontSize: Style.font.body
   }
 
   // Les debits glissent hors du cadre quand celui-ci se replie.
@@ -836,6 +1033,12 @@ BarWidget {
             DetailRow { label: "Upload"; value: root.formatRate(root.uploadRate) }
             DetailRow { label: "Router"; value: root.formatPing(root.info.router_ping_ms) }
             DetailRow { label: "Internet"; value: root.formatPing(root.info.internet_ping_ms) }
+            // Sous la latence, dont elle est le complement : une liaison peut
+            // repondre vite et perdre quand meme des paquets.
+            DetailRow {
+              label: "Loss"
+              value: root.formatPacketLoss(root.packetLossPercent)
+            }
           }
 
           // ---- Test de debit ----
@@ -894,6 +1097,94 @@ BarWidget {
               Text {
                 text: root.speedTestRunning ? "Measuring…" : (root.speedTestHasRun ? "Run again" : "Run speed test")
                 color: root.speedTestRunning ? root.accentColor : root.foregroundColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+          }
+
+          // ---- Bande Wi-Fi ----
+          PanelIsland {
+            visible: root.bandOffered
+
+            SectionHeader { text: "WI-FI BAND"; value: root.bandSectionValue }
+
+            // Masquees sous Auto : l'entete porte alors la bande en cours, et
+            // la rangee ne s'ouvre que lorsqu'on a quelque chose a y lire.
+            Row {
+              visible: root.bandSelected !== "auto" || root.bandPillsRevealed
+              spacing: Style.space(6)
+
+              Repeater {
+                model: root.bandOptions
+
+                BandPill {
+                  required property var modelData
+                  required property int index
+
+                  band: modelData
+                  pillIndex: index
+                }
+              }
+            }
+
+            // Sous Auto, de quoi ouvrir la rangee : sans cela une bande ne
+            // pourrait plus jamais etre epinglee une fois revenu en automatique.
+            CursorSurface {
+              visible: root.bandSelected === "auto" && !root.bandPillsRevealed
+              width: parent.width
+              height: Style.space(28)
+              hasCursor: false
+              foreground: root.foregroundColor
+              accent: root.accentColor
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.bandPillsRevealed = true
+              }
+
+              Text {
+                text: "Pin a band"
+                color: root.mutedColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+          }
+
+          // ---- Partage par QR ----
+          PanelIsland {
+            visible: root.canShareNetwork
+
+            SectionHeader { text: "SHARE" }
+
+            CursorSurface {
+              width: parent.width
+              height: Style.space(28)
+              hasCursor: root.cursorActive && root.cursor === root.rowIndexOf("qr", 0)
+              foreground: root.foregroundColor
+              accent: root.accentColor
+
+              HoverHandler {
+                onHoveredChanged: if (hovered) root.pointCursorAt("qr", 0)
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.shareNetworkQr()
+              }
+
+              Text {
+                text: "󰐲   Show Wi-Fi QR code"
+                color: root.foregroundColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
                 anchors.left: parent.left
@@ -1044,6 +1335,54 @@ BarWidget {
     }
   }
 
+  // Pastille de bande : meme surface de curseur que les lignes DNS, mais posee
+  // en rangee — quatre choix au plus, qui tiennent sur une ligne, la ou les
+  // resolveurs portent des noms trop longs pour cela.
+  component BandPill: CursorSurface {
+    id: bandPill
+
+    required property string band
+    required property int pillIndex
+
+    readonly property bool selected: root.bandSelected === band
+    // La bascule refait l'association : la pastille visee s'estompe le temps que
+    // la commande reponde, plutot que de s'allumer sur un resultat pas acquis.
+    readonly property bool pending: root.pendingBand === band
+
+    width: pillLabel.implicitWidth + Style.space(20)
+    height: Style.space(26)
+    hasCursor: root.cursorActive && root.cursor === root.rowIndexOf("band", pillIndex)
+    current: selected
+    foreground: root.foregroundColor
+    accent: root.accentColor
+
+    HoverHandler {
+      onHoveredChanged: if (hovered) root.pointCursorAt("band", bandPill.pillIndex)
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.setBand(bandPill.band)
+    }
+
+    Text {
+      id: pillLabel
+
+      text: root.bandLabel(bandPill.band)
+      color: bandPill.selected ? root.accentColor : root.foregroundColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: bandPill.selected
+      opacity: bandPill.pending ? 0.5 : 1
+      anchors.centerIn: parent
+
+      Behavior on opacity {
+        NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+      }
+    }
+  }
+
   component DnsRow: CursorSurface {
     id: dnsRow
 
@@ -1099,7 +1438,7 @@ BarWidget {
     required property var row
     required property int rowIndex
 
-    readonly property bool prompting: root.passwordSsid === row.ssid
+    readonly property bool prompting: root.passwordOpen && root.passwordSsid === row.ssid
     readonly property bool acting: root.actionSsid === row.ssid && root.actionKind !== ""
     readonly property bool failed: root.failureSsid === row.ssid && root.failureReason !== ""
 
@@ -1156,7 +1495,10 @@ BarWidget {
       }
 
       Text {
-        text: wifiRow.row.ssid
+        // Un point d'acces qui ne diffuse pas son nom apparait avec un SSID
+        // vide : sans ce repli, sa ligne serait une bande blanche sans rien a
+        // cliquer du regard.
+        text: wifiRow.row.ssid || "Hidden"
         color: wifiRow.row.connected ? root.accentColor : root.foregroundColor
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
