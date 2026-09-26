@@ -1,9 +1,8 @@
 -- Clipboard for sessions whose yanks may need to reach another machine:
--- every copy is emitted as OSC 52 (inside tmux this becomes a tmux buffer,
--- rebroadcast to every attached client, local or SSH). Paste prefers the
+-- every copy is emitted as OSC 52. Paste prefers the
 -- local system clipboard when one is available, so content copied in other
--- apps remains pasteable; without one, paste is an OSC 52 query that
--- tmux (or the terminal) answers.
+-- apps remains pasteable; without one, paste is an OSC 52 query that the
+-- terminal answers.
 local M = {}
 
 local function proc_lines(pid, file)
@@ -80,11 +79,10 @@ local function local_clipboard()
 end
 
 function M.setup()
-  local in_tmux = vim.env.TMUX ~= nil
   local in_ssh = vim.env.SSH_TTY ~= nil or vim.env.SSH_CONNECTION ~= nil
   local in_herdr = vim.env.HERDR_PANE_ID ~= nil or ancestor_process_named("herdr")
 
-  if not (in_tmux or in_ssh or in_herdr) then
+  if not (in_ssh or in_herdr) then
     return
   end
 
