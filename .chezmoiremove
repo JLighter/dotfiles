@@ -1,0 +1,13 @@
+{{- /* Cibles (relatives à $HOME) que `chezmoi apply` supprime : fichiers posés
+      par une version antérieure du dépôt, dont la source a disparu. chezmoi ne
+      supprime jamais seul la cible d'une source retirée. */ -}}
+
+# ── tmux, remplacé par herdr ─────────────────────────────────────────────────
+.tmux.conf
+.tmux
+.config/tmux
+.config/tmuxinator
+.config/nvim/lua/plugins/tmux.lua
+.config/omarchy/themed/tmux.conf.tpl
+.config/omarchy/hooks/theme-set.d/reload-tmux
+.claude/hooks/tmux-claude-status.sh

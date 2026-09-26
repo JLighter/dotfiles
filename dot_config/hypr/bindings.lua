@@ -18,8 +18,8 @@ o.bind("SUPER + SHIFT + W", "Typora", { launch = "typora --enable-wayland-ime" }
 -- ══════════════════════════════════════════════════════════════════════════════
 -- Focus au hjkl, en plus des flèches
 -- ══════════════════════════════════════════════════════════════════════════════
--- Même modèle mental que les deux autres couches : ctrl+h/j/k/l chez herdr,
--- vim-tmux-navigator dans tmux. Les flèches d'Omarchy restent en place, on
+-- Même modèle mental que la couche mux : ctrl+h/j/k/l chez herdr et Neovim.
+-- Les flèches d'Omarchy restent en place, on
 -- ajoute juste une seconde façon de faire le même geste.
 --
 -- Trois défauts Omarchy tombent au passage, H étant la seule des quatre touches

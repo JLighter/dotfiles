@@ -13,10 +13,6 @@ alias gim='vim . +Neogit +only'
 alias :q='exit'
 alias q='exit'
 
-# ----------------------
-# Tmux shortcuts
-# ----------------------
-alias tm="tmux"
 alias rm-node-modules-recursive="find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
 
 # ----------------------
@@ -67,4 +63,4 @@ fi
 # ----------------------
 # Exegol
 # ----------------------
-alias htb='exegol start --arch amd64 --vpn /Users/julien/Documents/Personal/HTB/StartingPoint/starting_point_JLighter.ovpn -V ~/.tmux.conf:/opt/my-resources/setup/tmux/tmux.conf:ro -V ~/.tmux:/root/.tmux:ro --desktop --env="DISPLAY=host.docker.internal:0" --shell=tmux htb full'
+alias htb='exegol start --arch amd64 --vpn /Users/julien/Documents/Personal/HTB/StartingPoint/starting_point_JLighter.ovpn --desktop --env="DISPLAY=host.docker.internal:0" htb full'

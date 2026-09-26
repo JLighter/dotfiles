@@ -27,9 +27,8 @@ déclenche automatiquement une seule fois (`run_once_`) :
 
 | Script                | Rôle                                                        |
 | --------------------- | ----------------------------------------------------------- |
-| `10-packages`         | zsh, git, neovim, tmux, fzf, zoxide, bat, spaceship          |
+| `10-packages`         | zsh, git, neovim, fzf, zoxide, bat, spaceship                |
 | `20-oh-my-zsh`        | oh-my-zsh et les trois plugins zsh                           |
-| `30-tpm`              | gestionnaire de plugins tmux                                 |
 | `40-default-shell`    | `chsh` vers zsh — seule étape qui demande le mot de passe    |
 
 Deux exceptions à ce « une seule fois » : `35-herdr-plugins` et
@@ -44,8 +43,8 @@ officiel (`~/.local/bin`, mis à jour ensuite par `herdr update`), puis le hook
 `config.toml`, `bin/spawn`, `workspaces/` et `plugins/config/herdr-spawn/config`.
 Le plugin hunk.diff demande en plus le binaire `hunk`, non installé ici.
 
-Deux gestes manuels restent, volontairement hors script : `<C-a> I` dans tmux pour
-installer les plugins, et le premier lancement de Neovim pour LazyVim.
+Un geste manuel reste, volontairement hors script : le premier lancement de
+Neovim pour LazyVim.
 
 ## Usage quotidien
 
@@ -123,7 +122,7 @@ done
 | Couche | Modificateur | Où                                                     |
 | ------ | ------------ | ------------------------------------------------------ |
 | WM     | `ALT`        | `.config/hypr/bindings.conf` — reprise des gestes i3    |
-| Mux    | `CTRL+SPACE` | prefix tmux **et** prefix herdr, identiques             |
+| Mux    | `CTRL+SPACE` | prefix herdr                                           |
 | Éditeur| `SPACE`      | leader LazyVim, défaut du framework                     |
 
 La couche WM reprend i3 (`$mod` y valait `Mod1` = ALT) : `ALT+Return` terminal,
@@ -155,16 +154,13 @@ suivent le thème sans que chezmoi ait quoi que ce soit à réappliquer.
 | ------ | ----------------------------------------------------------------------------- |
 | ghostty | `config-file = ?"…/current/theme/ghostty.conf"` — fourni par chaque thème      |
 | nvim   | `plugins/themes.lua` charge `…/current/theme/neovim.lua`, une spec lazy.nvim   |
-| tmux   | `themed/tmux.conf.tpl` traduit `colors.toml` en `@thm_*`, sourcé après Catppuccin |
 | btop   | natif Omarchy, le dépôt ne versionne pas `btop.conf`                          |
 
 Sur macOS, aucun de ces fichiers n'existe : ghostty et nvim retombent sur
 Catppuccin, qui suit la bascule clair/sombre du système.
 
-Le hook `hooks/theme-set.d/reload-tmux` resource `~/.tmux.conf` après un
-changement, pour que les sessions ouvertes se recolorent. Neovim n'est pas
-rechargé : un thème différent implique un autre plugin, donc `:Lazy sync` puis
-relance.
+Neovim n'est pas rechargé après un changement de thème : un thème différent
+implique un autre plugin, donc `:Lazy sync` puis relance.
 
 > **La police est le seul point de friction.** `omarchy font set` fait un `sed -i`
 > sur la ligne `font-family` de `~/.config/ghostty/config`, que le dépôt gère —
@@ -335,5 +331,3 @@ d'effort se surchargent par `CQ_ASK_*`, `CQ_CODE_*` et `CQ_DEEP_*`.
   [zsh-syntax-highlighting](https://github.com/zsh-users/zsh-syntax-highlighting).
 - **Neovim** : config [LazyVim](https://www.lazyvim.org/), les plugins s'installent
   au premier lancement (`lazy-lock.json` fait foi).
-- **tmux** : [tpm](https://github.com/tmux-plugins/tpm) à cloner dans
-  `~/.config/tmux/plugins/tpm`, puis `<C-a> I`.

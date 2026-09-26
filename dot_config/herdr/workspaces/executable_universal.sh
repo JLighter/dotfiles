@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Espace de travail « universal » — équivalent herdr de tmuxinator universal.yml
-# (~/.config/tmuxinator/universal.yml). Lancer depuis n'importe où, herdr
+# Espace de travail « universal », repris de l'ancien tmuxinator universal.yml.
+# Lancer depuis n'importe où, herdr
 # server actif : ~/.config/herdr/workspaces/universal.sh
 set -euo pipefail
 
