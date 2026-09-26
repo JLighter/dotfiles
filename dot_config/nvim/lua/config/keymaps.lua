@@ -5,3 +5,5 @@
 local map = LazyVim.safe_keymap_set
 
 map("n", "<leader>/", ":vsplit<CR>", { desc = "Split window right", remap = true, silent = true })
+
+require("config.navigation").setup()
