@@ -1,0 +1,8 @@
+# Refuse tout commit dont le contenu indexé contient un secret. Le dépôt est
+# public : un jeton poussé ici est compromis, même supprimé ensuite.
+# Activation après un clone : `pre-commit install` (fait par bootstrap.sh).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

@@ -56,4 +56,10 @@ fi
 log "Application des dotfiles"
 chezmoi init --source "$DOTFILES" --apply
 
+# ── 4. Garde-fou du dépôt ────────────────────────────────────────────────────
+# Le dépôt est public : pre-commit refuse tout commit qui contient un secret
+# (.pre-commit-config.yaml). Le paquet est installé par l'étape 3.
+log "Activation du hook pre-commit (gitleaks)"
+(cd "$DOTFILES" && pre-commit install)
+
 log "Terminé. Ouvre un nouveau terminal pour charger le shell."
