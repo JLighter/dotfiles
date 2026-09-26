@@ -1,0 +1,76 @@
+# Pionniers du développement logiciel : celles et ceux dont les livres ou les
+# pratiques sont devenus des références (pas les voix IA du moment).
+#
+# Deux types de sources :
+#   - feed:   flux RSS/Atom lu par fetch_feeds.py
+#   - search: requête WebSearch lancée par le skill (auteur sans flux, ou flux dormant)
+# Une source peut avoir les deux (flux dormant + présence ailleurs).
+# Flux vérifiés le 23/09/2026.
+
+sources:
+  - name: Martin Fowler
+    known_for: Refactoring, Patterns of Enterprise Application Architecture
+    feed: https://martinfowler.com/feed.atom
+    site: https://martinfowler.com
+
+  - name: Kent Beck
+    known_for: Extreme Programming, TDD, Tidy First?
+    feed: https://newsletter.kentbeck.com/feed
+    site: https://newsletter.kentbeck.com
+
+  - name: Ron Jeffries
+    known_for: Cofondateur d'Extreme Programming
+    feed: https://ronjeffries.com/feed.xml
+    site: https://ronjeffries.com
+
+  - name: Dave Farley
+    known_for: Continuous Delivery, Modern Software Engineering
+    feed: https://www.youtube.com/feeds/videos.xml?channel_id=UCCfqyGl3nq_V0bo64CjZh8g
+    site: https://www.youtube.com/@ModernSoftwareEngineeringYT
+
+  - name: Eric Evans
+    known_for: Domain-Driven Design
+    feed: https://www.domainlanguage.com/feed/
+    site: https://www.domainlanguage.com
+
+  # Blog dormant depuis 2023 : Uncle Bob publie surtout sur X.
+  - name: Robert C. Martin
+    known_for: Clean Code, Clean Architecture, SOLID
+    feed: https://blog.cleancoder.com/atom.xml
+    site: https://blog.cleancoder.com
+    search: Robert C. Martin Uncle Bob AI LLM programming
+
+  # Flux dormant depuis 2024.
+  - name: Michael Feathers
+    known_for: Working Effectively with Legacy Code
+    feed: https://michaelfeathers.substack.com/feed
+    site: https://michaelfeathers.substack.com
+
+  # Section blog seule : le flux racine mélange des dates 0001/2012.
+  - name: Dan North
+    known_for: Behaviour-Driven Development
+    feed: https://dannorth.net/blog/index.xml
+    site: https://dannorth.net
+
+  # Aucun flux connu. Sa pensée actuelle passe aussi par Kent Beck (couplage/cohésion).
+  - name: Larry Constantine
+    known_for: Structured Design, couplage et cohésion
+    site: https://en.wikipedia.org/wiki/Larry_Constantine
+    search: Larry Constantine software design AI
+
+  # Aucun flux : s'exprime sur X, Bluesky et en conférence, souvent sur l'IA.
+  - name: Grady Booch
+    known_for: UML, Object-Oriented Analysis and Design
+    site: https://en.wikipedia.org/wiki/Grady_Booch
+    search: Grady Booch AI software engineering
+
+  # Flux en 403 pour les robots.
+  - name: Rebecca Wirfs-Brock
+    known_for: Responsibility-Driven Design
+    site: https://wirfs-brock.com
+    search: Rebecca Wirfs-Brock AI design
+
+  - name: Alistair Cockburn
+    known_for: Use cases, Hexagonal Architecture, Manifeste agile
+    site: https://alistaircockburn.com
+    search: Alistair Cockburn AI hexagonal architecture

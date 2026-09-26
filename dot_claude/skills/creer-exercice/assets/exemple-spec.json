@@ -1,0 +1,377 @@
+{
+ "title": "Concevoir une eval",
+ "eyebrow": "Harness engineering · module 6 · second exercice",
+ "lede": "Dix décisions de conception d'une suite d'evals, du choix du grader à l'interprétation d'un score. Trois règles de janvier 2026 chez Anthropic : <strong>noter l'outcome, pas le chemin ; une task doit pouvoir être réussie par un humain qui la lit ; ce qui sert à améliorer ne sert pas à mesurer.</strong>",
+ "rule": [
+  [
+   "Outcome",
+   "l'état final, pas le récit"
+  ],
+  [
+   "Task",
+   "non ambiguë, solvable"
+  ],
+  [
+   "Isolation",
+   "aucun état partagé"
+  ],
+  [
+   "Contamination",
+   "itérer ≠ mesurer"
+  ]
+ ],
+ "perfect": "Aucune erreur. Tu sais construire une suite dont le score veut dire quelque chose.",
+ "fallback": "Relis les erreurs : chacune dit ce que le score mesurerait vraiment.",
+ "verdicts": {
+  "croire ce que dit l'agent": "Tu notes ce que l'agent affirme au lieu de l'état qu'il a produit. Un agent peut écrire « remboursement effectué » sans rien rembourser.",
+  "noter le chemin": "Tu notes la forme de la solution au lieu de son résultat. Toute solution correcte mais différente échouerait.",
+  "contamination": "Tu mesures sur les tasks qui ont servi à améliorer. Le score monte par ajustement, pas par progrès.",
+  "état partagé": "Tu attribues au modèle des écarts qui viennent de l'environnement. Chaque trial doit partir d'un état propre."
+ },
+ "questions": [
+  {
+   "src": "Grader",
+   "q": "Comment noter cette task ?",
+   "code": "Task : écrire une requête SQL qui renvoie les 10 clients\nau plus gros chiffre d'affaires en 2025.",
+   "opts": [
+    {
+     "id": "string",
+     "h": "Comparer le SQL",
+     "s": "à une requête de référence"
+    },
+    {
+     "id": "result",
+     "h": "Comparer le résultat",
+     "s": "sur une base de test figée"
+    },
+    {
+     "id": "llm",
+     "h": "Rubrique LLM",
+     "s": "qualité de la requête"
+    },
+    {
+     "id": "human",
+     "h": "Relecture humaine",
+     "s": "un DBA vérifie"
+    }
+   ],
+   "ok": [
+    "result"
+   ],
+   "trap": {
+    "string": "noter le chemin",
+    "llm": "noter le chemin"
+   },
+   "why": "Mille requêtes différentes sont correctes. Exécuter celle de l'agent sur une base de test figée et comparer les dix lignes à la référence note l'outcome, pas la forme du SQL."
+  },
+  {
+   "src": "Diagnostic",
+   "q": "Scores entre 60 % et 90 % d'une exécution à l'autre. Premier suspect ?",
+   "code": "Les trials tournent en séquence dans le même conteneur.\nLe trial 7 trouve un fichier export.csv laissé par le trial 6.",
+   "opts": [
+    {
+     "id": "nd",
+     "h": "Le non-déterminisme du modèle",
+     "s": "c'est normal"
+    },
+    {
+     "id": "shared",
+     "h": "L'état partagé entre trials",
+     "s": "environnement non isolé"
+    },
+    {
+     "id": "few",
+     "h": "Trop peu de tasks",
+     "s": "variance statistique"
+    },
+    {
+     "id": "grader",
+     "h": "Le grader LLM",
+     "s": "il varie"
+    }
+   ],
+   "ok": [
+    "shared"
+   ],
+   "trap": {
+    "nd": "état partagé",
+    "few": "état partagé"
+   },
+   "why": "Un trial qui trouve les fichiers du précédent ne part pas du même état. Certaines tasks réussissent ou échouent selon l'ordre. Anthropic : chaque trial dans un environnement propre, sans état partagé."
+  },
+  {
+   "src": "Task",
+   "q": "Que faire de cette task ?",
+   "code": "Task : améliore la performance de la page produit.\nGrader : la task passe si la page est plus rapide.",
+   "opts": [
+    {
+     "id": "keep",
+     "h": "La garder",
+     "s": "c'est un vrai besoin"
+    },
+    {
+     "id": "precise",
+     "h": "La préciser",
+     "s": "métrique, seuil, conditions"
+    },
+    {
+     "id": "llm",
+     "h": "Passer à un grader LLM",
+     "s": "pour juger « plus rapide »"
+    },
+    {
+     "id": "del",
+     "h": "La supprimer",
+     "s": "la performance ne se teste pas"
+    }
+   ],
+   "ok": [
+    "precise"
+   ],
+   "trap": {
+    "llm": "noter le chemin"
+   },
+   "why": "Deux experts ne seraient pas d'accord sur sa réussite. Elle devient : LCP sous 1,8 s au 75e centile, sur le profil mobile de Lighthouse, avec le jeu de données de test. Là, un humain peut dire si elle passe."
+  },
+  {
+   "src": "Couverture",
+   "q": "Que manque-t-il à cette suite ?",
+   "code": "30 tasks pour un agent de support :\n« rembourse la commande », « change l'adresse »,\n« annule l'abonnement »… toutes doivent aboutir.",
+   "opts": [
+    {
+     "id": "neg",
+     "h": "Des tasks où l'agent doit refuser",
+     "s": "cas négatifs"
+    },
+    {
+     "id": "more",
+     "h": "Plus de tasks du même type",
+     "s": "100 au lieu de 30"
+    },
+    {
+     "id": "hard",
+     "h": "Des tasks plus difficiles",
+     "s": "pour la capacité"
+    },
+    {
+     "id": "none",
+     "h": "Rien",
+     "s": "la suite est complète"
+    }
+   ],
+   "ok": [
+    "neg"
+   ],
+   "trap": {
+    "none": "croire ce que dit l'agent"
+   },
+   "why": "Un agent qui rembourse tout passe cette suite à 100 %. Il faut des tasks où l'action doit être refusée : commande déjà remboursée, délai dépassé, client non authentifié. C'est le negative space de ton CLAUDE.md, appliqué aux evals."
+  },
+  {
+   "src": "Task",
+   "q": "Avant d'ajouter cette task à la suite ?",
+   "code": "Task : migrer le module de facturation de Express vers\nFastify sans casser les 40 tests existants.\nPersonne ne l'a encore faite.",
+   "opts": [
+    {
+     "id": "ref",
+     "h": "Écrire une solution de référence",
+     "s": "prouver qu'elle est faisable"
+    },
+    {
+     "id": "add",
+     "h": "L'ajouter telle quelle",
+     "s": "l'agent dira si c'est faisable"
+    },
+    {
+     "id": "split",
+     "h": "La découper en 5",
+     "s": "elle est trop grosse"
+    },
+    {
+     "id": "llm",
+     "h": "Ajouter un grader LLM",
+     "s": "pour les cas limites"
+    }
+   ],
+   "ok": [
+    "ref"
+   ],
+   "why": "Si une task est impossible, par exemple parce qu'un test dépend d'un comportement propre à Express, chaque échec accuse l'agent à tort. Une solution de référence prouve qu'on peut la réussir et sert d'exemple aux graders."
+  },
+  {
+   "src": "Score",
+   "q": "Comment lire ce résultat ?",
+   "code": "Nouvelle suite de capacité pour la génération de\nmigrations complexes : 30 % de réussite.",
+   "opts": [
+    {
+     "id": "normal",
+     "h": "Normal pour une eval de capacité",
+     "s": "c'est la pente à gravir"
+    },
+    {
+     "id": "remove",
+     "h": "Retirer les tasks trop dures",
+     "s": "viser 80 %"
+    },
+    {
+     "id": "model",
+     "h": "Changer de modèle",
+     "s": "celui-ci n'y arrive pas"
+    },
+    {
+     "id": "threshold",
+     "h": "Baisser le seuil de réussite",
+     "s": "les graders sont trop stricts"
+    }
+   ],
+   "ok": [
+    "normal"
+   ],
+   "trap": {
+    "remove": "contamination",
+    "threshold": "contamination"
+   },
+   "why": "Une eval de capacité part basse par construction : elle mesure ce que l'agent ne sait pas encore faire. La rendre facile la saturerait avant qu'elle ait servi."
+  },
+  {
+   "src": "Régression",
+   "q": "Après un changement de skill, que faire ?",
+   "code": "Suite de régression : 100 % depuis deux mois.\nAprès modification du skill « api-conventions » : 94 %.",
+   "opts": [
+    {
+     "id": "block",
+     "h": "Bloquer et lire les transcripts",
+     "s": "des 3 tasks tombées"
+    },
+    {
+     "id": "noise",
+     "h": "Accepter",
+     "s": "le non-déterminisme"
+    },
+    {
+     "id": "rerun",
+     "h": "Relancer jusqu'à 100 %",
+     "s": "c'est du bruit"
+    },
+    {
+     "id": "drop",
+     "h": "Retirer les 3 tasks",
+     "s": "elles sont fragiles"
+    }
+   ],
+   "ok": [
+    "block"
+   ],
+   "trap": {
+    "rerun": "contamination",
+    "drop": "contamination"
+   },
+   "why": "Une suite de régression doit rester près de 100 %. Trois tasks qui tombent juste après un changement désignent le changement. Les transcripts diront si le skill a cassé quelque chose ou si les tasks testaient un détail."
+  },
+  {
+   "src": "Grader",
+   "q": "Comment vérifier ce remboursement ?",
+   "code": "Task : rembourser la commande 4411.\nDernier message de l'agent : « Le remboursement de\n42,90 € a bien été effectué. »",
+   "opts": [
+    {
+     "id": "state",
+     "h": "Vérifier la base",
+     "s": "une ligne refund existe pour 4411"
+    },
+    {
+     "id": "msg",
+     "h": "Analyser le message",
+     "s": "avec un grader LLM"
+    },
+    {
+     "id": "tool",
+     "h": "Vérifier l'appel d'outil",
+     "s": "refund() a été appelé"
+    },
+    {
+     "id": "human",
+     "h": "Demander au client",
+     "s": "par un humain"
+    }
+   ],
+   "ok": [
+    "state"
+   ],
+   "trap": {
+    "msg": "croire ce que dit l'agent",
+    "tool": "noter le chemin"
+   },
+   "why": "Le message dit ce que l'agent croit ou affirme. L'appel d'outil dit ce qu'il a tenté. Seule la ligne en base, avec le bon montant, dit ce qui s'est passé. Anthropic cite ce cas : vérifier l'enregistrement du remboursement."
+  },
+  {
+   "src": "Méthode",
+   "q": "Pourquoi ce +19 points ne prouve-t-il pas que le skill s'est amélioré ?",
+   "code": "1. Suite de 40 tasks, 3 trials par task : 62 %.\n2. Lire les transcripts des échecs, ajuster le skill\n   pour corriger ces échecs précis.\n3. Relancer ces mêmes 40 tasks, 3 trials : 81 %.\n4. Annoncer au client : +19 points.",
+   "opts": [
+    {
+     "id": "contam",
+     "h": "Le skill a été ajusté sur ces tasks",
+     "s": "il faut mesurer sur d'autres"
+    },
+    {
+     "id": "few",
+     "h": "40 tasks ne suffisent pas",
+     "s": "il en faut plusieurs centaines"
+    },
+    {
+     "id": "trials",
+     "h": "3 trials ne suffisent pas",
+     "s": "il en faut au moins 10"
+    },
+    {
+     "id": "none",
+     "h": "Il le prouve",
+     "s": "même suite, même protocole"
+    }
+   ],
+   "ok": [
+    "contam"
+   ],
+   "trap": {
+    "none": "contamination",
+    "few": "contamination"
+   },
+   "why": "Réponse : le skill a été ajusté pour corriger ces 40 tasks-là, donc son score sur elles monte mécaniquement. Il faut le mesurer sur un second jeu de tasks, jamais regardé pendant les ajustements. Les autres options : 40 tasks est dans la fourchette qu'Anthropic recommande pour démarrer ; 3 trials par task suffisent à repérer le non-déterminisme ; et « même suite, même protocole » est justement le problème, pas la garantie."
+  },
+  {
+   "src": "Grader",
+   "q": "Le grader actuel donne 0 à ce trial. Que faut-il changer ?",
+   "code": "Task : ajouter l'export CSV des commandes.\nLe grader vérifie 5 critères : colonnes, encodage UTF-8,\nséparateur, ligne d'en-tête, tri par date.\nIl note 1 si les 5 passent, 0 sinon.\nRésultat du trial : 4 critères passent, l'encodage échoue.",
+   "opts": [
+    {
+     "id": "partial",
+     "h": "Noter critère par critère",
+     "s": "4 sur 5, et nommer celui qui échoue"
+    },
+    {
+     "id": "binary",
+     "h": "Rien, garder 0",
+     "s": "la task n'est pas faite"
+    },
+    {
+     "id": "llm",
+     "h": "Remplacer par une note LLM",
+     "s": "une note globale sur 10"
+    },
+    {
+     "id": "rerun",
+     "h": "Relancer jusqu'à 5 sur 5",
+     "s": "l'échec est peut-être du bruit"
+    }
+   ],
+   "ok": [
+    "partial"
+   ],
+   "trap": {
+    "llm": "noter le chemin",
+    "rerun": "contamination"
+   },
+   "why": "Réponse : noter critère par critère. Le 0 binaire met au même niveau un agent qui rate tout et un agent qui ne rate que l'encodage ; on ne voit ni le progrès ni le point bloquant. Anthropic recommande ce crédit partiel pour les tasks à plusieurs composants. Les autres options : garder 0 cache l'information utile ; une note LLM sur 10 remplace 5 vérifications exactes par un jugement flou ; relancer jusqu'au succès masque un échec qui se reproduit à chaque trial. Variante équivalente : découper en 5 tasks d'un critère chacune."
+  }
+ ]
+}
