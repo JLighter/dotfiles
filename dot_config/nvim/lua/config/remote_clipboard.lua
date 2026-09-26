@@ -1,8 +1,8 @@
 -- Clipboard for sessions whose yanks may need to reach another machine:
 -- every copy is emitted as OSC 52 (inside tmux this becomes a tmux buffer,
 -- rebroadcast to every attached client, local or SSH). Paste prefers the
--- local Wayland clipboard when one is available, so content copied in other
--- apps remains pasteable; without a display, paste is an OSC 52 query that
+-- local system clipboard when one is available, so content copied in other
+-- apps remains pasteable; without one, paste is an OSC 52 query that
 -- tmux (or the terminal) answers.
 local M = {}
 
@@ -40,6 +40,45 @@ local function ancestor_process_named(name)
   return false
 end
 
+-- Commands driving the local system clipboard, when this machine has one.
+-- Wayland separates the primary selection ("*") from the clipboard ("+");
+-- the macOS pasteboard has no such split, so both registers share it.
+local function local_clipboard()
+  if
+    vim.env.WAYLAND_DISPLAY ~= nil
+    and vim.fn.executable("wl-copy") == 1
+    and vim.fn.executable("wl-paste") == 1
+  then
+    return {
+      copy = function(register)
+        local cmd = { "wl-copy", "--sensitive", "--type", "text/plain" }
+        if register == "*" then
+          cmd[#cmd + 1] = "--primary"
+        end
+        return cmd
+      end,
+      paste = function(register)
+        local cmd = { "wl-paste", "--no-newline" }
+        if register == "*" then
+          cmd[#cmd + 1] = "--primary"
+        end
+        return cmd
+      end,
+    }
+  end
+
+  if vim.fn.executable("pbcopy") == 1 and vim.fn.executable("pbpaste") == 1 then
+    return {
+      copy = function()
+        return { "pbcopy" }
+      end,
+      paste = function()
+        return { "pbpaste" }
+      end,
+    }
+  end
+end
+
 function M.setup()
   local in_tmux = vim.env.TMUX ~= nil
   local in_ssh = vim.env.SSH_TTY ~= nil or vim.env.SSH_CONNECTION ~= nil
@@ -50,20 +89,14 @@ function M.setup()
   end
 
   local osc52 = require("vim.ui.clipboard.osc52")
-  local has_wayland = vim.env.WAYLAND_DISPLAY ~= nil
-    and vim.fn.executable("wl-copy") == 1
-    and vim.fn.executable("wl-paste") == 1
+  local local_cb = local_clipboard()
 
   local function copy(register)
     local emit = osc52.copy(register)
 
     return function(lines)
-      if has_wayland then
-        local cmd = { "wl-copy", "--sensitive", "--type", "text/plain" }
-        if register == "*" then
-          cmd[#cmd + 1] = "--primary"
-        end
-        vim.fn.system(cmd, lines)
+      if local_cb then
+        vim.fn.system(local_cb.copy(register), lines)
       end
 
       if vim.g.omarchy_remote_clipboard_osc52 ~= false then
@@ -73,17 +106,15 @@ function M.setup()
   end
 
   local function paste(register)
-    if not has_wayland then
+    -- An OSC 52 query blocks for 10s when nothing answers it (Ghostty denies
+    -- clipboard reads, Herdr does not relay them), so it stays a last resort:
+    -- read the local clipboard whenever this machine has one.
+    if not local_cb then
       return osc52.paste(register)
     end
 
     return function()
-      local cmd = { "wl-paste", "--no-newline" }
-      if register == "*" then
-        cmd[#cmd + 1] = "--primary"
-      end
-
-      local lines = vim.fn.systemlist(cmd, "", 1)
+      local lines = vim.fn.systemlist(local_cb.paste(register), "", 1)
       return vim.v.shell_error == 0 and lines or {}
     end
   end
