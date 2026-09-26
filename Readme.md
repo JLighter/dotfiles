@@ -232,6 +232,13 @@ des plugins. La frontière est tenue par `dot_claude/.gitignore`, avec une seule
 exception, `plugins/claude-hud/config.json`, qui est bien un réglage même s'il
 vit au milieu du cache.
 
+`settings.json` est un template : le hook que pose `herdr integration install
+claude` y figure avec le chemin absolu du HOME, que herdr recrée s'il ne le
+trouve pas à l'identique. `{{ .chezmoi.homeDir }}` le rend exact sur chaque
+machine. Revers : `chezmoi re-add` ignore les templates, un changement fait
+depuis Claude Code (`/config`, `/plugin`) se reporte avec `chezmoi merge
+~/.claude/settings.json`.
+
 ### Statusline
 
 Le HUD de la statusline vient de [claude-hud](https://github.com/jarrodwatts/claude-hud),
