@@ -1,0 +1,13 @@
+# pre-commit install && pre-commit install --hook-type commit-msg
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: commit-msg-id
+        name: identifiant de traçabilité dans le message
+        entry: bash -c 'grep -qE "(^|[^A-Za-z])(US|BR|ADR|HI|F)-[0-9]+" "$1" || { echo "Message sans identifiant (US-, BR-, ADR-, HI-, F-)"; exit 1; }' --
+        language: system
+        stages: [commit-msg]

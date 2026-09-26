@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": ["Bash(npm test:*)", "Bash(npm run lint:*)", "Bash(npx tsc:*)"],
+    "deny": ["Read(./.env*)", "Read(./secrets/**)", "Bash(git push --force:*)", "Bash(git commit --no-verify:*)"]
+  },
+  "hooks": {
+    "PostToolUse": [{ "matcher": "Edit|Write",
+      "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-edit.sh" }] }],
+    "Stop": [{
+      "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop-tests.sh" }] }]
+  }
+}
