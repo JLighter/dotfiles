@@ -129,7 +129,6 @@
     "claude-md-management@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
-    "learning-output-style@claude-plugins-official": true,
     "claude-hud@claude-hud": true,
     "cowork-plugin-management@synced": false
   },
