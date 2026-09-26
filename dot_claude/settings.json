@@ -75,6 +75,7 @@
     "defaultMode": "default",
     "disableBypassPermissionsMode": "disable"
   },
+  "model": "opus",
   "enableAllProjectMcpServers": false,
   "hooks": {
     "SessionStart": [
@@ -83,6 +84,16 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/cleanup-processes.sh --startup",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "^(startup|resume|clear|compact|fork)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '/Users/julien/.claude/hooks/herdr-agent-state.sh' session",
             "timeout": 10
           }
         ]
@@ -121,7 +132,6 @@
     "claude-code-setup@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "learning-output-style@claude-plugins-official": true,
-    "terraform-skill@antonbabenko": true,
     "pyright-lsp@claude-plugins-official": true,
     "qodo@claude-plugins-official": true,
     "claude-hud@claude-hud": true
@@ -245,5 +255,17 @@
       ]
     }
   },
+  "syntaxHighlightingDisabled": false,
+  "modelSettings": {
+    "claude-fable-5-1": {
+      "effortLevel": "medium"
+    }
+  },
+  "advisorModel": "fable",
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark-ansi",
+  "switchModelsOnFlag": false,
+  "agentPushNotifEnabled": true,
   "voiceEnabled": false
 }
