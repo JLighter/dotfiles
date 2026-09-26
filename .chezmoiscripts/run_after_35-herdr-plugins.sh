@@ -24,8 +24,9 @@ if ! command -v herdr >/dev/null 2>&1; then
     log "Installation de herdr"
     # Telecharge avant d'executer : dans `curl | sh`, un curl en echec donne a
     # sh une entree vide, qui sort en 0. Meme regle que pour les plugins : sans
-    # reseau, le reste de l'apply passe.
-    if ! installer=$(curl -fsSL https://herdr.dev/install.sh) \
+    # reseau, le reste de l'apply passe. Les delais bornent un reseau qui ne
+    # repond pas (portail captif) : l'installateur borne lui-meme les siens.
+    if ! installer=$(curl -fsSL --connect-timeout 10 --max-time 30 https://herdr.dev/install.sh) \
         || ! printf '%s\n' "$installer" | sh; then
         log "herdr : installation echouee, a rejouer"
         exit 0
