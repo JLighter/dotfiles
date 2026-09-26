@@ -1,6 +1,6 @@
 ---
 name: reprise
-description: Protocole de session d'un projet long initialisé par l'initializer (features.json et claude-progress.md à la racine). Utiliser au début de chaque session pour reprendre le travail, quand l'utilisateur dit reprendre, continuer, passer à la suite ou fonctionnalité suivante, et avant de terminer une session pour la clôturer. Ne pas utiliser dans un projet sans features.json.
+description: Protocole de session d'un projet long initialisé par le skill marathon (features.json et claude-progress.md à la racine). Utiliser au début de chaque session pour reprendre le travail, quand l'utilisateur dit reprendre, continuer, passer à la suite ou fonctionnalité suivante, et avant de terminer une session pour la clôturer. Ne pas utiliser dans un projet sans features.json.
 ---
 
 # Reprise

@@ -1,11 +1,11 @@
 ---
-name: initializer
+name: marathon
 description: Initialise un projet long, qui demandera plusieurs sessions d'agent, selon le harness d'Anthropic pour agents longue durée. Produit une liste de fonctionnalités en JSON, un fichier de progression, un script init.sh, et installe dans le projet le hook et le skill de reprise qui relisent ces fichiers à chaque session. Utiliser quand l'utilisateur veut démarrer un projet ou une tâche qui dépassera une session, ou demande d'initialiser un harness longue durée. Ne pas utiliser pour une tâche qui tient en une session.
 ---
 
-# Initializer
+# Marathon
 
-Cet agent ne tourne qu'une fois par projet. Il n'écrit aucun code applicatif : il prépare ce dont les sessions suivantes auront besoin pour reprendre sans mémoire. Source : Anthropic, « Effective harnesses for long-running agents », novembre 2025.
+Ce skill joue le rôle de l'« initializer agent » de l'article d'Anthropic. Il ne tourne qu'une fois par projet. Il n'écrit aucun code applicatif : il prépare ce dont les sessions suivantes auront besoin pour reprendre sans mémoire. Source : Anthropic, « Effective harnesses for long-running agents », novembre 2025.
 
 ## Étape 0 : préconditions
 
@@ -40,7 +40,7 @@ Copier `templates/claude-progress.md` à la racine et remplir la session 0.
 
 Un commit qui contient tous ces fichiers, message « chore: initialise le harness longue durée », et une ligne dans `claude-progress.md` qui le référence.
 
-## Ce que l'initializer ne fait pas
+## Ce que marathon ne fait pas
 
 - Il n'implémente aucune fonctionnalité et ne passe aucun `passes` à `true`.
 - Il ne réécrit pas un projet déjà initialisé.

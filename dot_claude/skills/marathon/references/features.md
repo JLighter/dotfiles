@@ -48,7 +48,7 @@ Après découpage, compter les entrées. Moins de 15 pour un projet de plusieurs
 
 ### Ce que ces règles ne font pas
 
-- Elles n'estiment pas le nombre de fichiers ou de lignes : l'initializer ne connaît pas encore le code.
+- Elles n'estiment pas le nombre de fichiers ou de lignes : marathon ne connaît pas encore le code.
 - Elles ne garantissent pas qu'une entrée tienne en une session. Si une session n'arrive pas à la terminer, elle ne la découpe pas elle-même : elle note le blocage dans `claude-progress.md`, et l'humain décide du découpage, puis committe avec `--no-verify`.
 
 ## Ordre de priorité

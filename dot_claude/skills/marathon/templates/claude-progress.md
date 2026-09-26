@@ -7,7 +7,7 @@ last-updated: <date>
 
 # Progression
 
-## Session 0 — <date> — initializer
+## Session 0 — <date> — marathon
 - Fait : features.json (<n> fonctionnalités), init.sh, hooks de reprise, commit initial <sha>
 - Décisions : <stack retenue et pourquoi, en une ligne chacune>
 - Reprise : F-001
