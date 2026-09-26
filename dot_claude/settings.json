@@ -87,18 +87,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/format-on-edit.sh",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "hooks": [
