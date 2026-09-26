@@ -26,7 +26,7 @@ Avant chaque tâche d'écriture (code, IaC, documentation structurante), évalue
 |---|---|---|
 | **LOW** | Changement isolé, un seul fichier, pas d'effet de bord, bien couvert par les tests | Exécution directe, vérification standard |
 | **MEDIUM** | Plusieurs fichiers, logique métier, dépendances à vérifier | Vérifier les dépendances avant d'agir, tests plus rigoureux |
-| **HIGH** | Zone critique (sécurité, données, auth, paiement), changement structurel, irréversible, multi-modules | **Planifier d'abord** (skill `mode-planification`) : produire un plan, le valider avec l'humain, puis exécuter |{{/* Couche 1/3 · Mode planification · origine bb31af5, 2026-08-27 · mesure R4 T06 et T14 */}}
+| **HIGH** | Zone critique (sécurité, données, auth, paiement), changement structurel, irréversible, multi-modules | **Planifier d'abord** : passer en plan mode, faire valider le plan par l'humain, puis exécuter |{{/* Couche 1/3 · Mode planification · origine bb31af5, 2026-08-27 · mesure R4 T06 et T14 · skill mode-planification retiré (8f4ee0c), renvoi au plan mode natif 2026-09-27, non remesuré */}}
 
 Un sub-agent peut réévaluer le risque à la hausse, jamais à la baisse sans justification. Charger le minimum, mais jamais un contexte incomplet : conventions et glossaire (LOW) ; + ADR et stories liées (MEDIUM) ; + toutes les BR du périmètre, ADR complètes et code du module (HIGH). En cas de doute sur une contrainte, lire le document plutôt que deviner.{{/* Couche 1 / 2 / 3 · Chargement de contexte adaptatif · origine bb31af5, 2026-08-27 · mesure R4 T12 */}}
 
