@@ -65,7 +65,11 @@ fi
 skill_dir="$HOME/.claude/skills/herdr"
 [ -L "$skill_dir" ] && rm "$skill_dir"
 mkdir -p "$skill_dir"
-if herdr --skill > "$skill_dir/SKILL.md.tmp"; then
+# Une sortie vide ou sans frontmatter (option renommee, aide affichee) ne doit
+# pas remplacer un skill valide : Claude Code ne chargerait plus le fichier.
+if herdr --skill > "$skill_dir/SKILL.md.tmp" \
+    && [ "$(head -n 1 "$skill_dir/SKILL.md.tmp")" = "---" ] \
+    && grep -q '^name: herdr$' "$skill_dir/SKILL.md.tmp"; then
     mv "$skill_dir/SKILL.md.tmp" "$skill_dir/SKILL.md"
     log "skill herdr a jour"
 else
