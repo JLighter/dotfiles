@@ -15,46 +15,46 @@ Fondation universelle, chargée par toutes les conversations, tous les agents et
 
 ## Principes fondamentaux
 
-- **Obligation de maîtrise.** Ce que tu produis, tu dois pouvoir l'expliquer, ligne par ligne, décision par décision. Si tu ne peux pas l'expliquer, tu ne le livres pas. Ce qui est retenu d'une suggestion LLM devient la décision de celui qui la retient.{{/* Couche 1 */}}
-- **Doute par défaut.** Toute sortie d'un LLM est un brouillon à vérifier. Un résultat plausible n'est pas un résultat correct. Un outil qui confirme une intuition ne la valide pas.{{/* Couche 1 */}}
-- **Comprendre avant de produire.** Lire le contexte existant (specs, ADR, glossaire, conventions) avant de générer quoi que ce soit. Si le contexte manque, le demander : pas d'hypothèse silencieuse.{{/* Couche 1 */}}
-- **Negative space.** Définir ce que le système ne doit PAS faire avec autant de rigueur que ce qu'il doit faire : un test négatif pour chaque test positif, des assertions sur les préconditions, postconditions et invariants.{{/* Couche 1 et 4 */}}
-- **Vocabulaire du domaine.** Utiliser les termes du glossaire du projet (`docs/domain/glossary.md` ou équivalent) partout : code, tests, documentation, conversations. Un terme ambigu est un bug de communication. Pas de synonymes non déclarés.{{/* Couche 1 */}}
-- **Traçabilité.** Tout livrable est rattachable à sa source : code → test → AC → story → règle métier ; décision technique → ADR ; composant UI → story + design system ; infrastructure → ADR + policy.{{/* Couche 1 - 4 */}}
-- **Identifiants explicites et grepables.** Chaque référence croisée utilise un identifiant formel (`BR-XXX`, `US-XXX`, `ADR-XXX`, `EPIC-XXX`, `AC-XX`, `FF-XXX`, `CONV-XXX`). Un `grep` sur un ID retourne tous les documents liés.
+- **Obligation de maîtrise.** Ce que tu produis, tu dois pouvoir l'expliquer, ligne par ligne, décision par décision. Si tu ne peux pas l'expliquer, tu ne le livres pas. Ce qui est retenu d'une suggestion LLM devient la décision de celui qui la retient.{{/* Couche 1 · origine bb31af5, 2026-08-27 */}}
+- **Doute par défaut.** Toute sortie d'un LLM est un brouillon à vérifier. Un résultat plausible n'est pas un résultat correct. Un outil qui confirme une intuition ne la valide pas.{{/* Couche 1 · origine bb31af5, 2026-08-27 */}}
+- **Comprendre avant de produire.** Lire le contexte existant (specs, ADR, glossaire, conventions) avant de générer quoi que ce soit. Si le contexte manque, le demander : pas d'hypothèse silencieuse.{{/* Couche 1 · origine bb31af5, 2026-08-27 · mesure R4 T12 */}}
+- **Negative space.** Définir ce que le système ne doit PAS faire avec autant de rigueur que ce qu'il doit faire : un test négatif pour chaque test positif, des assertions sur les préconditions, postconditions et invariants.{{/* Couche 1 et 4 · origine bb31af5, 2026-08-27 · mesure R4 T09 */}}
+- **Vocabulaire du domaine.** Utiliser les termes du glossaire du projet (`docs/domain/glossary.md` ou équivalent) partout : code, tests, documentation, conversations. Un terme ambigu est un bug de communication. Pas de synonymes non déclarés.{{/* Couche 1 · origine bb31af5, 2026-08-27 · formulation d'origine, R4 T11 non concluant */}}
+- **Traçabilité.** Tout livrable est rattachable à sa source : code → test → AC → story → règle métier ; décision technique → ADR ; composant UI → story + design system ; infrastructure → ADR + policy.{{/* Couche 1 - 4 · origine bb31af5, 2026-08-27 · mesure R4 T15 */}}
+- **Identifiants explicites et grepables.** Chaque référence croisée utilise un identifiant formel (`BR-XXX`, `US-XXX`, `ADR-XXX`, `EPIC-XXX`, `AC-XX`, `FF-XXX`, `CONV-XXX`). Un `grep` sur un ID retourne tous les documents liés.{{/* Lisibilité LLM · origine bb31af5, 2026-08-27 · gardée à la racine après R4 T14 */}}
 
 ## Design
 
-- KISS, YAGNI, SOLID.{{/* Couche 1 */}}
-- **Réversibilité.** À options équivalentes, préférer celle qu'on peut défaire. Un choix irréversible nécessite une justification proportionnelle au risque, documentée dans une ADR.{{/* Couche 1 */}}
-- **Tidy First.** Jamais un changement de structure et un changement de comportement dans le même commit. Préférer les micro-rangements aux refactorings massifs. Réduire le couplage ; ce qui change ensemble vit ensemble.{{/* Couche 1 */}}
+- KISS, YAGNI, SOLID.{{/* Couche 1 · origine bb31af5, 2026-08-27 · mesure R4 T07 */}}
+- **Réversibilité.** À options équivalentes, préférer celle qu'on peut défaire. Un choix irréversible nécessite une justification proportionnelle au risque, documentée dans une ADR.{{/* Couche 1 · origine bb31af5, 2026-08-27 */}}
+- **Tidy First.** Jamais un changement de structure et un changement de comportement dans le même commit. Préférer les micro-rangements aux refactorings massifs. Réduire le couplage ; ce qui change ensemble vit ensemble.{{/* Couche 1 · origine bb31af5, 2026-08-27 · mesure R4 T05 et T08 */}}
 
 ## Risque, planification et contexte
 
-Avant chaque tâche d'écriture (code, IaC, documentation structurante), évaluer le niveau de risque :{{/* Couche 1 */}}
+Avant chaque tâche d'écriture (code, IaC, documentation structurante), évaluer le niveau de risque :{{/* Couche 1 · Classification de risque · origine bb31af5, 2026-08-27 */}}
 
 | Niveau | Critères | Comportement attendu |
 |---|---|---|
 | **LOW** | Changement isolé, un seul fichier, pas d'effet de bord, bien couvert par les tests | Exécution directe, vérification standard |
 | **MEDIUM** | Plusieurs fichiers, logique métier, dépendances à vérifier | Vérifier les dépendances avant d'agir, tests plus rigoureux |
-| **HIGH** | Zone critique (sécurité, données, auth, paiement), changement structurel, irréversible, multi-modules | **Planifier d'abord** (skill `mode-planification`) : produire un plan, le valider avec l'humain, puis exécuter |{{/* Couche 1/3 */}}
+| **HIGH** | Zone critique (sécurité, données, auth, paiement), changement structurel, irréversible, multi-modules | **Planifier d'abord** (skill `mode-planification`) : produire un plan, le valider avec l'humain, puis exécuter |{{/* Couche 1/3 · Mode planification · origine bb31af5, 2026-08-27 · mesure R4 T06 et T14 */}}
 
-Un sub-agent peut réévaluer le risque à la hausse, jamais à la baisse sans justification. Charger le minimum, mais jamais un contexte incomplet : conventions et glossaire (LOW) ; + ADR et stories liées (MEDIUM) ; + toutes les BR du périmètre, ADR complètes et code du module (HIGH). En cas de doute sur une contrainte, lire le document plutôt que deviner.{{/* Couche 1 / 2 / 3 */}}
+Un sub-agent peut réévaluer le risque à la hausse, jamais à la baisse sans justification. Charger le minimum, mais jamais un contexte incomplet : conventions et glossaire (LOW) ; + ADR et stories liées (MEDIUM) ; + toutes les BR du périmètre, ADR complètes et code du module (HIGH). En cas de doute sur une contrainte, lire le document plutôt que deviner.{{/* Couche 1 / 2 / 3 · Chargement de contexte adaptatif · origine bb31af5, 2026-08-27 · mesure R4 T12 */}}
 
 ## Cycle de développement
 
-- Rien n'est implémenté sans spec. Rien n'est livré sans test qui prouve la conformité à la spec.
-- Red → Green → Refactor → Review. Si un test passe immédiatement, il ne teste probablement rien.
-- Baby steps : lister les étapes avant de partir ; chaque pas est petit, laisse le système vert, et se vérifie avant le suivant. Si un pas casse, revenir au dernier état sûr et raccourcir le pas.
-- Un test vérifie l'intention : l'attendu se dérive de la spec, jamais de l'implémentation. Pas d'assertion sur le « comment » (mocks internes, ordre des appels, état interne).
+- Rien n'est implémenté sans spec. Rien n'est livré sans test qui prouve la conformité à la spec.{{/* origine bb31af5, 2026-08-27 */}}
+- Red → Green → Refactor → Review. Si un test passe immédiatement, il ne teste probablement rien.{{/* origine bb31af5, 2026-08-27 · mesure R4 T09 */}}
+- Baby steps : lister les étapes avant de partir ; chaque pas est petit, laisse le système vert, et se vérifie avant le suivant. Si un pas casse, revenir au dernier état sûr et raccourcir le pas.{{/* origine f08a1f9, 2026-09-23 */}}
+- Un test vérifie l'intention : l'attendu se dérive de la spec, jamais de l'implémentation. Pas d'assertion sur le « comment » (mocks internes, ordre des appels, état interne).{{/* origine f08a1f9, 2026-09-23 · mesure R4 T10 */}}
 
 ## Limites et interdits
 
-Un LLM ne fait jamais : trancher un arbitrage métier ; valider un livrable (« c'est bon », « c'est correct ») ; recevoir des secrets, données personnelles ou données clients non anonymisées ; évaluer la compétence ou la performance d'un membre de l'équipe ; prioriser le backlog ; se substituer au mentorat humain. Si tu hésites à soumettre quelque chose à un LLM, la réponse est non.
+Un LLM ne fait jamais : trancher un arbitrage métier ; valider un livrable (« c'est bon », « c'est correct ») ; recevoir des secrets, données personnelles ou données clients non anonymisées ; évaluer la compétence ou la performance d'un membre de l'équipe ; prioriser le backlog ; se substituer au mentorat humain. Si tu hésites à soumettre quelque chose à un LLM, la réponse est non.{{/* origine bb31af5, 2026-08-27 · mesure R4 T13 */}}
 
 ## context7
 
-Documentation live des librairies, frameworks, SDK et API. L'utiliser systématiquement pour écrire du code qui utilise une librairie, vérifier une syntaxe, une API ou une option de configuration : tes connaissances peuvent être obsolètes.
+Documentation live des librairies, frameworks, SDK et API. L'utiliser systématiquement pour écrire du code qui utilise une librairie, vérifier une syntaxe, une API ou une option de configuration : tes connaissances peuvent être obsolètes.{{/* origine 598f435, 2026-08-07 */}}
 {{ else -}}
 # Global Conventions
 
