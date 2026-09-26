@@ -31,3 +31,4 @@ pnpm-lock.yaml
 .config/mako
 .config/omarchy
 {{ end }}
+.claude/skills/**/.claude
