@@ -37,6 +37,13 @@ Deux exceptions à ce « une seule fois » : `35-herdr-plugins` et
 dépôt versionne la *déclaration* mais pas le *clone* ; celui-ci peut disparaître
 sans que la déclaration bouge, et laisse alors une touche ou une statusline muette.
 
+`35-herdr-plugins` pose aussi herdr lui-même s'il manque, par l'installateur
+officiel (`~/.local/bin`, mis à jour ensuite par `herdr update`), puis le hook
+`herdr integration install claude` appelé par `settings.json`, et régénère
+`~/.claude/skills/herdr` depuis `herdr --skill`. Sa config versionnée :
+`config.toml`, `bin/spawn`, `workspaces/` et `plugins/config/herdr-spawn/config`.
+Le plugin hunk.diff demande en plus le binaire `hunk`, non installé ici.
+
 Deux gestes manuels restent, volontairement hors script : `<C-a> I` dans tmux pour
 installer les plugins, et le premier lancement de Neovim pour LazyVim.
 

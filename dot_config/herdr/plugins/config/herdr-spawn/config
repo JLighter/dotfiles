@@ -1,0 +1,36 @@
+# ── herdr-spawn : configuration ──────────────────────────────────────
+# Ce fichier est sourcé par bash : syntaxe clé=valeur, pas d'espaces
+# autour du =. Il vit dans le config dir du plugin
+# (`herdr plugin config-dir herdr-spawn`) et vous appartient.
+
+# Agent lancé par défaut (kinds supportés : `herdr agent start --help`).
+kind=claude
+
+# Types conventional-commit autorisés dans les noms de branches (<type>/<slug>).
+branch_types='feat fix chore docs refactor test perf style ci build'
+
+# Type par défaut quand la formulation du prompt n'en suggère aucun.
+branch_type_default=feat
+
+# Donner le focus au pane de l'agent après lancement (true/false).
+# false : la sidebar et les notifications suivent son état.
+focus=false
+
+# Direction du split en mode --here (right/down).
+here_direction=right
+
+# Ref de base des worktrees (vide = branche courante).
+base=
+
+# Nombre de prompts conservés dans l'historique (↑ dans le popup).
+history_size=200
+
+# Slug de branche généré par LLM local (stdin: instruction+prompt, stdout: nom).
+slug_command='ollama run gemma3:4b'
+
+# Attente max du slug_command au lancement (0 = jamais attendre).
+slug_wait=3
+
+# Précharge le modèle à l'ouverture du popup (le slug arrive en ~1s au
+# lieu de rater le timeout pendant le chargement du modèle).
+slug_warmup='curl -s http://localhost:11434/api/generate -d "{\"model\":\"gemma3:4b\",\"keep_alive\":\"30m\"}"'
