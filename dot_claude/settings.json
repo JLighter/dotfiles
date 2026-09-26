@@ -253,15 +253,10 @@
     }
   },
   "syntaxHighlightingDisabled": false,
-  "modelSettings": {
-    "claude-fable-5-1": {
-      "effortLevel": "medium"
-    }
-  },
   "advisorModel": "fable",
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
-  "theme": "dark-ansi",
+  "theme": "auto",
   "switchModelsOnFlag": false,
   "agentPushNotifEnabled": true,
   "voiceEnabled": false
