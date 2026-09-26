@@ -29,6 +29,7 @@
       "Read(~/.netrc)",
       "Read(~/.claude/.credentials.json)",
       "Read(~/.claude.json)",
+      "Read(~/.claude/backups/**)",
       "Edit(~/.claude/settings.json)",
       "Edit(~/.claude/settings.local.json)",
       "Bash(rm -r*)",
@@ -188,6 +189,10 @@
         },
         {
           "path": "~/.claude.json",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.claude/backups",
           "mode": "deny"
         }
       ],
