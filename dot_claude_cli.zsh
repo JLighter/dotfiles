@@ -129,9 +129,9 @@ claude-quick-review() {
 # cqd "comment découper le module de paiement"
 claude-quick-deep() {
   if (( $# )); then
-    command claude --model "$CQ_DEEP_MODEL" --effort "$CQ_DEEP_EFFORT" --permission-mode plan "$*"
+    claude --model "$CQ_DEEP_MODEL" --effort "$CQ_DEEP_EFFORT" --permission-mode plan "$*"
   else
-    command claude --model "$CQ_DEEP_MODEL" --effort "$CQ_DEEP_EFFORT" --permission-mode plan
+    claude --model "$CQ_DEEP_MODEL" --effort "$CQ_DEEP_EFFORT" --permission-mode plan
   fi
 }
 
@@ -143,6 +143,33 @@ alias cqf='claude-quick-fix'
 alias cqc='claude-quick-commit'
 alias cqv='claude-quick-review'
 alias cqd='claude-quick-deep'
+
+# ── 0. Session propre hors projet ───────────────────────────────────────────
+# `claude` lancé hors d'un projet démarre sans aucun serveur MCP (connecteurs
+# claude.ai, plugins, serveurs user-scope) : --strict-mcp-config sans
+# --mcp-config. Dans un projet, rien ne change.
+# Projet = pas $HOME, et (dépôt git, ou CLAUDE.md / .mcp.json dans le dossier).
+# Échappatoires : `command claude` pour une session complète ;
+# `claude --mcp-config <fichier>` pour charger un serveur précis malgré strict.
+# Les sous-commandes (claude mcp, update, plugin…) passent sans le flag.
+_cl_in_project() {
+  [[ $PWD != $HOME ]] || return 1
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 && return 0
+  [[ -f CLAUDE.md || -f .mcp.json ]]
+}
+
+claude() {
+  case $1 in
+    agents|attach|auth|auto-mode|doctor|gateway|import|install|logs|mcp|plugin|plugins|project|respawn|rm|setup-token|stop|kill|ultrareview|update|upgrade)
+      command claude "$@" ;;
+    *)
+      if _cl_in_project; then
+        command claude "$@"
+      else
+        command claude --strict-mcp-config "$@"
+      fi ;;
+  esac
+}
 
 # Sessions interactives (cc est déjà le compilateur C, on ne le masque pas)
 alias cl='claude'
