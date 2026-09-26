@@ -1,6 +1,6 @@
 #!/bin/sh
-# Plugins herdr. config.toml declare en `plugin_action` les touches de deux
-# d'entre eux :
+# herdr et ce qu'il pose hors du depot. Plugins : config.toml declare en
+# `plugin_action` les touches de deux d'entre eux :
 #   vim-herdr-navigation — ctrl+h/j/k/l
 #   herdr-spawn          — prefix+enter, lanceur d'agent
 # herdr.auto-title (titre des onglets) et hunk.diff (diffs, demande `hunk`)
@@ -15,8 +15,22 @@ set -eu
 
 log() { printf '\033[1;34m::\033[0m %s\n' "$1"; }
 
-# Le binaire lui-meme reste un geste manuel : https://herdr.dev/docs/install/
-command -v herdr >/dev/null 2>&1 || { log "herdr absent, plugins ignores"; exit 0; }
+# Binaire : installateur officiel, qui verifie le SHA-256 du manifeste et pose
+# herdr dans ~/.local/bin, sans sudo. Seulement s'il manque : les mises a jour
+# passent ensuite par `herdr update`. ~/.local/bin n'est pas forcement dans le
+# PATH de chezmoi (zshrc l'ajoute plus tard), d'ou l'ajout ici.
+PATH="$PATH:$HOME/.local/bin"
+if ! command -v herdr >/dev/null 2>&1; then
+    log "Installation de herdr"
+    # Telecharge avant d'executer : dans `curl | sh`, un curl en echec donne a
+    # sh une entree vide, qui sort en 0. Meme regle que pour les plugins : sans
+    # reseau, le reste de l'apply passe.
+    if ! installer=$(curl -fsSL https://herdr.dev/install.sh) \
+        || ! printf '%s\n' "$installer" | sh; then
+        log "herdr : installation echouee, a rejouer"
+        exit 0
+    fi
+fi
 
 install_if_missing() {
     if herdr plugin list 2>/dev/null | grep -q "^- $2 "; then
