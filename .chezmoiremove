@@ -11,3 +11,6 @@
 .config/omarchy/themed/tmux.conf.tpl
 .config/omarchy/hooks/theme-set.d/reload-tmux
 .claude/hooks/tmux-claude-status.sh
+
+# ── ~/.mcp.json vide, plus utilisé ───────────────────────────────────────────
+.mcp.json
