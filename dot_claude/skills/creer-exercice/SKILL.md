@@ -1,11 +1,33 @@
 ---
 name: creer-exercice
-description: Produit un exercice interactif sous forme de page web (artifact) : une série de cas, des réponses à choisir, une explication par cas, et un diagnostic qui nomme les biais de l'apprenant. Utiliser pour un exercice de fin de module d'un cours, un quiz de formation pour une équipe, ou un test de compréhension sur un sujet. Mots-clés : exercice, quiz, QCM, cas pratiques, évaluation de formation.
+description: Produit un exercice sous forme de page web (artifact) dans l'un de trois formats, QCM de fin de chapitre, exercice à biais (cas, explication par option, diagnostic des biais) ou TP (construire quelque chose, avec indices et correction commentée), sur un ton bienveillant de style Site du Zéro. Utiliser pour l'exercice d'un chapitre de cours, un quiz de formation pour une équipe, un TP, ou un test de compréhension. Mots-clés : exercice, quiz, QCM, TP, travaux pratiques, cas pratiques, évaluation de formation.
 ---
 
-# Créer un exercice interactif
+# Créer un exercice
 
-Un exercice n'est pas un contrôle de mémoire : il met l'apprenant devant des cas et nomme les biais qui le font se tromper. Le générateur `assets/engine.py` produit la page à partir d'une spécification JSON ; ce skill sert à écrire une bonne spécification.
+Un exercice n'est pas un contrôle de mémoire : il met l'apprenant devant des cas et nomme ce qui le fait se tromper. Le générateur `assets/engine.py` produit la page à partir d'une spécification JSON ; ce skill sert à écrire une bonne spécification.
+
+## Trois formats
+
+| Format | Quand | Taille | Forme |
+|---|---|---|---|
+| **QCM** | fin de chapitre, vérifier le concept du chapitre | 4 à 6 questions | générateur, pièges légers, explication de chaque option |
+| **Exercice à biais** | fin de partie, tester le raisonnement | 10 à 12 cas | générateur, étapes 1 à 5 ci-dessous |
+| **TP** | toutes les deux ou trois leçons, construire | un projet | page ou section : énoncé, objectif vérifiable, indices dépliables (`<details>`) du plus léger au plus direct, correction commentée, « Pour aller plus loin » |
+
+Pour un TP :
+- La correction montre **une** solution et dit pourquoi elle est construite ainsi, pas « la » solution.
+- L'objectif est vérifiable par l'apprenant lui-même : un test qui passe, une commande qui répond, une page qui s'affiche.
+- Les indices se déplient un par un : l'apprenant choisit combien d'aide il prend.
+
+## Ton des explications
+
+Même ton que le cours (voir `creer-cours`, `references/style-zero.md`). Tutoiement par défaut, phrases courtes, bienveillant sans être mou.
+- Une mauvaise réponse est expliquée par le raisonnement qui y mène : « c'est tentant parce que… ; le piège, c'est… ».
+- Jamais « c'était facile » ni « évident ».
+- Le diagnostic nomme des biais de raisonnement, pas des défauts de la personne.
+
+Les étapes suivantes valent pour l'exercice à biais, et pour le QCM en version courte (un ou deux pièges suffisent).
 
 ## Étape 1 : nommer les biais avant d'écrire les cas
 

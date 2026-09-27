@@ -31,6 +31,25 @@ Les parties à jugement (critères d'une grille, règles de découpage) ont ét�
 
 Le cours a produit trois skills utilisables (audit, initialisation de projet long, reprise). Un cours qui se termine par un outil que l'apprenant installe et utilise se transfère mieux qu'un cours qui se termine par un quiz.
 
+## Étiqueter et faire vérifier (révision du 2026-09-27)
+
+La première version du cours comptait 202 affirmations. Des sous-agents indépendants les ont confrontées au texte des sources :
+- aucune ne rapportait un résultat d'étude ;
+- 29 déformaient leur source ;
+- 10 étaient contredites par elle.
+
+Deux erreurs de fait avaient été publiées :
+- un hook qui sort en 0 avec une sortie JSON atteint bien l'agent : seule la sortie texte est invisible ;
+- un « consensus à 60 lignes » décrivait en fait un seul fichier, repris par une seconde voix.
+
+Les déformations allaient toutes vers plus de certitude. La réécriture, puis ses corrections, en ont réintroduit de nouvelles à chaque passe : seule la vérification indépendante les a attrapées. D'où l'étape 6 et les étiquettes de l'étape 5.
+
+Une même erreur s'est propagée du cours à la grille d'audit, puis à un gabarit de skill : le hook Stop lançant toute la suite de tests, pratique que la source citée avait abandonnée. Une affirmation non vérifiée dans un cours devient un mécanisme installé chez un client.
+
+## Le style
+
+La première version était dense et écrite pour un lecteur déjà expert. Le style de `style-zero.md`, inspiré du Site du Zéro, sert à ce qu'un débutant ne décroche pas. Il ne change rien à la rigueur.
+
 ## Les exercices
 
 Voir le skill `creer-exercice`, fichier `references/qualite-questions.md`. Les erreurs de conception qui y sont listées ont toutes été commises puis corrigées pendant ce cours.

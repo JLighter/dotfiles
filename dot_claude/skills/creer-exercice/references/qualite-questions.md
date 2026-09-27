@@ -31,7 +31,11 @@ Le titre de l'option dit l'action ou la position ; la ligne sous le titre la pr�
 
 ## 6. Les faits techniques sont vérifiés
 
-Un code de sortie, une option d'outil, un comportement de configuration se vérifient dans la documentation avant d'entrer dans un cas. Erreur commise : un hook présenté comme une bonne boucle de retour alors qu'il sortait en code 0 et que l'agent ne voyait jamais sa sortie.
+Un code de sortie, une option d'outil, un comportement de configuration se vérifient dans la documentation avant d'entrer dans un cas. Erreur commise : un hook présenté comme une bonne boucle de retour alors qu'il sortait en code 0 avec une sortie texte, que l'agent ne voit jamais. Puis erreur inverse en le corrigeant : affirmer qu'un hook en code 0 est toujours invisible, alors qu'une sortie JSON (`decision`, `additionalContext`) atteint l'agent. Une vérification partielle généralisée est une seconde erreur.
+
+## 6 bis. Une réponse ne teste pas une opinion comme un fait
+
+Si la bonne réponse repose sur une opinion de praticien ou une synthèse du cours, l'énoncé le dit (« selon HumanLayer », « d'après la grille du cours »). Sinon l'exercice enseigne une opinion comme une vérité.
 
 ## 7. Le diagnostic couvre toutes les erreurs
 
