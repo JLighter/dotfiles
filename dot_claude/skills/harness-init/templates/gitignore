@@ -1,0 +1,5 @@
+# À ajouter au .gitignore du projet : réglages personnels, jamais partagés.
+.claude/settings.local.json
+CLAUDE.local.md
+# Variante documentation en wiki de forge seulement :
+# .wiki/

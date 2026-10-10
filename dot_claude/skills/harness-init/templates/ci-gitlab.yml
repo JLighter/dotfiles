@@ -1,6 +1,16 @@
 # .gitlab-ci.yml
+secrets:
+  stage: test
+  image: { name: zricethezav/gitleaks:v8.18.0, entrypoint: [""] }
+  variables: { GIT_DEPTH: 0 }
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - gitleaks detect --source . --verbose
+
 verify:
   stage: test
+  image: <image de la stack, avec git>
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:

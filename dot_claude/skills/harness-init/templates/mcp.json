@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "<nom>": {
+      "type": "http",
+      "url": "<URL du serveur MCP officiel de l'outil, vérifiée dans sa documentation>",
+      "headers": { "Authorization": "Bearer ${<VARIABLE>}" }
+    }
+  }
+}
