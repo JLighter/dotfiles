@@ -19,6 +19,7 @@ modele-cible: claude-opus-5-5
 - KISS, YAGNI, SOLID.{{/* Couche 1 · origine bb31af5, 2026-08-27 · mesure R4 T07 */}}
 - **Réversibilité.** À options équivalentes, préférer celle qu'on peut défaire. Un choix irréversible nécessite une justification proportionnelle au risque, documentée dans une ADR.{{/* Couche 1 · origine bb31af5, 2026-08-27 */}}
 - **Tidy First.** Jamais un changement de structure et un changement de comportement en même temps. Préférer les micro-rangements aux refactorings massifs. Réduire le couplage ; ce qui change ensemble vit ensemble.{{/* Couche 1 · origine bb31af5, 2026-08-27 · mesure R4 T05 et T08 · reformulée 2026-09-26 */}}
+- **Composition over inheritance.** Préférer toujours la composition à l'héritage. Préférer les fonctions pures aux effets de bord. Préférer les types aux conventions implicites. Préférer la clarté à la concision.{{/* origine : ajout direct au déployé, 2026-09-30, non mesuré */}}
 
 Avant chaque tâche d'écriture (code, IaC, documentation structurante), évaluer le niveau de risque :{{/* Couche 1 · Classification de risque · origine bb31af5, 2026-08-27 */}}
 
