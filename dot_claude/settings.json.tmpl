@@ -72,11 +72,12 @@
       "Bash(chezmoi apply*)",
       "Bash(brew *)"
     ],
-    "defaultMode": "auto",
+    "defaultMode": "default",
     "disableBypassPermissionsMode": "disable"
   },
   "model": "opus",
   "enableAllProjectMcpServers": false,
+  "disableClaudeAiConnectors": true,
   "hooks": {
     "SessionStart": [
       {
@@ -130,15 +131,8 @@
     "claude-code-setup@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "claude-hud@claude-hud": true,
-    "cowork-plugin-management@synced": false
-  },
-  "extraKnownMarketplaces": {
-    "claude-hud": {
-      "source": {
-        "source": "github",
-        "repo": "jarrodwatts/claude-hud"
-      }
-    }
+    "cowork-plugin-management@synced": false,
+    "cc-plugin-you-should-know@builtin": false
   },
   "language": "French",
   "sandbox": {
@@ -252,11 +246,19 @@
     }
   },
   "syntaxHighlightingDisabled": false,
-  "advisorModel": "fable",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
+  "advisorModel": "opus",
   "tui": "fullscreen",
+  "autoMemoryEnabled": false,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
   "switchModelsOnFlag": false,
+  "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true,
-  "voiceEnabled": false
+  "voiceEnabled": false,
+  "disableMobileSimulatorTools": true
 }
