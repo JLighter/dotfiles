@@ -285,9 +285,16 @@ par le dépôt, donc par un diff git relu, jamais par une écriture directe.
 > fichier lui-même ne l'est pas. Les chemins du home, eux, sont couverts au
 > niveau OS par `sandbox.credentials.files`.
 
-`disableBypassPermissionsMode` neutralise `--dangerously-skip-permissions`, et
-`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` retire les credentials Anthropic et cloud de
-l'environnement de tous les sous-processus, sandbox ou pas.
+`disableBypassPermissionsMode` neutralise `--dangerously-skip-permissions`.
+
+`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` n'est volontairement pas posé. Il retire bien
+les credentials de l'environnement de tous les sous-processus, mais sous Linux
+il force aussi le sandbox (`sandbox.enabled` devient sans effet) et dépose à la
+racine du dossier de travail des fichiers vides — `package.json`, lockfiles,
+`.env*`, `bunfig.toml`, `.gitmodules` — en ajoutant à chaque session un bloc
+« scrub-mode stubs » de plus dans `.git/info/exclude`. Sans lui, les variables
+sensibles restent retirées des commandes Bash sandboxées par
+`sandbox.credentials.envVars`, mais pas des hooks ni des serveurs MCP.
 
 ### Raccourcis shell
 
@@ -315,10 +322,11 @@ n'importe quelle commande de piper son contexte dans `cq`.
 mais leur liste d'outils s'arrête à `Read`, `Edit`, `Write`, `Grep` et `Glob` :
 pas de commande auto-approuvée, et un `git diff` suffit à défaire la passe. La
 liste est déclarée deux fois, en `--permission-mode acceptEdits` et en
-`--allowedTools` explicite, parce que `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` remet
-le mode de permission à `default` dès que la commande est lancée depuis une
-session Claude Code — et c'est justement ce que ce message d'avertissement
-demande de faire.
+`--allowedTools` explicite, parce qu'avec `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`
+actif, le mode de permission retombe à `default` dès que la commande est lancée
+depuis une session Claude Code — et c'est justement ce que ce message
+d'avertissement demande de faire. La variable n'est plus posée ici (cf.
+Permissions), mais la double déclaration ne coûte rien et tient si elle revient.
 
 `cq` tourne en `--safe-mode` : ni `CLAUDE.md`, ni skills, ni MCP, ni hooks. Une
 question qui n'a rien à voir avec le projet courant n'a pas à traîner ses
