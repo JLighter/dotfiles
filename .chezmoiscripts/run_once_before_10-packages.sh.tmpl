@@ -12,13 +12,15 @@ fi
 
 log "Paquets Homebrew"
 # go et pre-commit : hook gitleaks du dépôt dotfiles (.pre-commit-config.yaml).
-brew install --quiet zsh git neovim fzf zoxide bat spaceship go pre-commit
+# jq : statusline et hooks de Claude Code (dot_claude/).
+brew install --quiet zsh git neovim fzf zoxide bat spaceship go pre-commit jq
 {{- else -}}
 log "Paquets pacman"
 # ttf-roboto-mono-nerd : la police de tout le système, cf. script 50-font.
 # go et pre-commit : hook gitleaks du dépôt dotfiles (.pre-commit-config.yaml).
+# jq : statusline et hooks de Claude Code (dot_claude/).
 sudo pacman -S --needed --noconfirm zsh git neovim fzf zoxide bat \
-    ttf-roboto-mono-nerd go pre-commit
+    ttf-roboto-mono-nerd go pre-commit jq
 
 # spaceship n'est que dans l'AUR. yay est fourni par Omarchy.
 if command -v yay >/dev/null 2>&1; then
