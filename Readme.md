@@ -240,12 +240,12 @@ depuis Claude Code (`/config`, `/plugin`) se reporte avec `chezmoi merge
 ### Statusline
 
 `dot_claude/executable_statusline.sh` (déployé en `~/.claude/statusline.sh`)
-affiche, en segments powerline, le modèle, le
-remplissage du contexte (vert sous 50 %, jaune jusqu'à 79 %, rouge au-delà,
-`--` tant que Claude Code ne l'a pas encore mesuré), le dossier courant et la
-branche git, suivie de `*` si des fichiers suivis sont modifiés. Il ne prend
-que les 16 couleurs ANSI, pour suivre le thème Omarchy, et demande `jq` (posé
-par `10-packages`) ainsi qu'une Nerd Font (`50-font`).
+affiche une ligne sobre : le modèle et sa configuration (effort, fast,
+thinking, agent, style), la jauge de remplissage (jaune à 30 %, rouge à 60 %,
+`--` tant que rien n'est mesuré), puis le dossier, la branche git (`*` si un
+fichier suivi est modifié), le worktree et la PR, cliquable. Trop large pour
+le terminal, la ligne s'abrège puis retire les éléments secondaires. Il
+demande `jq` (posé par `10-packages`) et une Nerd Font (`50-font`).
 
 Claude Code n'affiche rien si le script échoue : chaque panne (jq absent,
 entrée illisible) se rabat donc sur un message lisible. Tests :
