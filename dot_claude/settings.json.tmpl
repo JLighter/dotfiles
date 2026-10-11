@@ -75,7 +75,7 @@
     "defaultMode": "default",
     "disableBypassPermissionsMode": "disable"
   },
-  "model": "opus",
+  "model": "opus[1m]",
   "enableAllProjectMcpServers": false,
   "disableClaudeAiConnectors": true,
   "hooks": {
@@ -115,6 +115,18 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/cleanup-processes.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Workflow|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/require-routage-agents.sh",
             "timeout": 10
           }
         ]
