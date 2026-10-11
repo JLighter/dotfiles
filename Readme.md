@@ -31,10 +31,10 @@ déclenche automatiquement une seule fois (`run_once_`) :
 | `20-oh-my-zsh`        | oh-my-zsh et les trois plugins zsh                           |
 | `40-default-shell`    | `chsh` vers zsh — seule étape qui demande le mot de passe    |
 
-Deux exceptions à ce « une seule fois » : `35-herdr-plugins` et
-`36-claude-plugins` rejouent à chaque `apply`. Ils installent des plugins dont le
-dépôt versionne la *déclaration* mais pas le *clone* ; celui-ci peut disparaître
-sans que la déclaration bouge, et laisse alors une touche ou une statusline muette.
+Une exception à ce « une seule fois » : `35-herdr-plugins` rejoue à chaque
+`apply`. Il installe des plugins dont le dépôt versionne la *déclaration* mais
+pas le *clone* ; celui-ci peut disparaître sans que la déclaration bouge, et
+laisse alors une touche muette.
 
 `35-herdr-plugins` pose aussi herdr lui-même s'il manque, par l'installateur
 officiel (`~/.local/bin`, mis à jour ensuite par `herdr update`), puis le hook
@@ -228,9 +228,7 @@ se retire d'elle-même de la barre.
 
 `dot_claude/` versionne ce qui est *réglage* — `settings.json`, agents, skills,
 rules, hooks — et laisse dehors ce qui est *état* : sessions, historique, cache
-des plugins. La frontière est tenue par `dot_claude/.gitignore`, avec une seule
-exception, `plugins/claude-hud/config.json`, qui est bien un réglage même s'il
-vit au milieu du cache.
+des plugins. La frontière est tenue par `dot_claude/.gitignore`.
 
 `settings.json` est un template : le hook que pose `herdr integration install
 claude` y figure avec le chemin absolu du HOME, que herdr recrée s'il ne le
@@ -238,21 +236,6 @@ trouve pas à l'identique. `{{ .chezmoi.homeDir }}` le rend exact sur chaque
 machine. Revers : `chezmoi re-add` ignore les templates, un changement fait
 depuis Claude Code (`/config`, `/plugin`) se reporte avec `chezmoi merge
 ~/.claude/settings.json`.
-
-### Statusline
-
-Le HUD de la statusline vient de [claude-hud](https://github.com/jarrodwatts/claude-hud),
-installé depuis sa propre marketplace. `settings.json` déclare la marketplace et
-active le plugin, mais le clone lui-même vit sous `~/.claude/plugins/`, hors du
-dépôt : `.chezmoiscripts/36-claude-plugins.sh` le repose s'il manque. Comme les
-plugins herdr, il rejoue à chaque `apply` plutôt qu'une seule fois, puisque le
-cache peut être purgé sans que la déclaration bouge.
-
-`/claude-hud:setup` génère normalement une ligne de commande d'une centaine de
-caractères avec le chemin absolu du runtime en dur — `/opt/homebrew/bin/node` sur
-macOS, `/usr/bin/node` sur Arch. Impossible à versionner tel quel. La statusline
-pointe donc sur `hooks/claude-hud-statusline.sh`, qui résout le runtime (bun s'il
-existe, node sinon) et la version du plugin au lancement.
 
 ### Permissions
 
