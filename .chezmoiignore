@@ -3,6 +3,7 @@
 # ── Fichiers du dépôt qui ne doivent pas atterrir dans $HOME ──────────────────
 Readme.md
 bootstrap.sh
+tests
 
 # Une session Claude Code ouverte ici pose des fichiers vides à la racine pour
 # empêcher un gestionnaire de paquets de remonter au-dessus du projet. Elle les
