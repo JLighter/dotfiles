@@ -29,7 +29,8 @@ déclenche automatiquement une seule fois (`run_once_`) :
 | --------------------- | ----------------------------------------------------------- |
 | `10-packages`         | zsh, git, neovim, fzf, zoxide, bat, spaceship                |
 | `20-oh-my-zsh`        | oh-my-zsh et les trois plugins zsh                           |
-| `40-default-shell`    | `chsh` vers zsh — seule étape qui demande le mot de passe    |
+| `40-default-shell`    | `chsh` vers zsh — demande le mot de passe                    |
+| `70-keymap`           | `localectl set-keymap fr` (console et X11) — `sudo`, Linux   |
 
 Une exception à ce « une seule fois » : `35-herdr-plugins` rejoue à chaque
 `apply`. Il installe des plugins dont le dépôt versionne la *déclaration* mais
@@ -98,7 +99,8 @@ fichiers qui **divergent réellement** des défauts de la distro :
 
 | Fichier                    | Écart                                          |
 | -------------------------- | ---------------------------------------------- |
-| `.config/hypr/input.conf`  | `kb_layout = us`                               |
+| `.config/hypr/input.lua`   | `fr` variante `mac`, compose sur Caps Lock     |
+| `.XCompose`                | emoji Omarchy, identité vide                   |
 | `.config/hypr/envs.conf`   | variables NVIDIA                               |
 | `.config/hypr/hyprsplit.conf` | workspaces par écran — **inactif**, cf. en-tête |
 
