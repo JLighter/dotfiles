@@ -31,6 +31,8 @@ pnpm-lock.yaml
 .config/hypr
 .config/omarchy
 .config/tapo-ctl
+# Inclut /usr/share/omarchy/default/xcompose, absent hors Omarchy.
+.XCompose
 .local/bin/tapo-ctl
 {{ end }}
 
