@@ -290,29 +290,14 @@ BarWidget {
   visible: pinnedItems.length > 0 || drawerCount > 0
   clip: false
 
-  readonly property int drawerBlockExtent: allItems.length > 0 ? chevronExtent + drawerExtent : 0
+  // Le tiroir ne reserve aucune place une fois referme : l'ilot se resserre sur
+  // le chevron et ne s'elargit qu'a mesure que les icones se deplient.
+  readonly property int drawerBlockExtent: allItems.length > 0 ? chevronExtent + revealExtent : 0
   readonly property int pinnedExtent: pinnedItems.length * itemExtent
   readonly property int contentExtent: contentGap + drawerBlockExtent + pinnedExtent + contentGap
 
   implicitWidth: root.vertical ? islandSize : contentExtent
   implicitHeight: root.vertical ? contentExtent : islandSize
-
-  // Le tiroir referme reserve la place ou il glissera : sans masque, la survoler
-  // suffirait a l'ouvrir, et les clics n'atteindraient pas ce qu'il y a dessous.
-  containmentMask: QtObject {
-    function contains(point: point): bool {
-      var along = root.vertical ? point.y : point.x
-      var across = root.vertical ? point.x : point.y
-      var thickness = root.vertical ? root.width : root.height
-
-      if (across < 0 || across > thickness) return false
-
-      // Le chevron se tient au bout du bloc quand tout est referme, et remonte
-      // vers le debut a mesure que le tiroir s'ouvre.
-      var chevronStart = root.contentGap + root.drawerExtent - root.revealExtent
-      return along >= chevronStart && along <= root.contentExtent
-    }
-  }
 
   Rectangle {
     anchors.fill: parent
@@ -353,18 +338,18 @@ BarWidget {
         }
 
         Chevron {
-          x: root.drawerExtent - root.revealExtent
+          x: 0
           anchors.verticalCenter: parent.verticalCenter
         }
 
         Item {
           x: root.chevronExtent
-          width: root.drawerExtent
+          width: root.revealExtent
           height: parent.height
           clip: true
 
           Row {
-            x: root.drawerExtent - root.revealExtent
+            x: 0
             anchors.verticalCenter: parent.verticalCenter
             spacing: 0
 
@@ -410,7 +395,7 @@ BarWidget {
         }
 
         Chevron {
-          y: root.drawerExtent - root.revealExtent
+          y: 0
           anchors.horizontalCenter: parent.horizontalCenter
           glyphRotation: 90
         }
@@ -418,11 +403,11 @@ BarWidget {
         Item {
           y: root.chevronExtent
           width: parent.width
-          height: root.drawerExtent
+          height: root.revealExtent
           clip: true
 
           Column {
-            y: root.drawerExtent - root.revealExtent
+            y: 0
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 0
 
