@@ -189,8 +189,8 @@ Deux réserves, à connaître :
 Les plugins maison vivent dans `.config/omarchy/plugins/local.*`. `Bar.qml`
 instancie chaque widget en dur : un widget dont l'outil sous-jacent est absent
 doit donc se retirer lui-même de la barre plutôt que de ne pas être déployé.
-`Voxtype.qml` et `Tapo.qml` suivent tous deux ce motif — une sonde `Process` au
-démarrage, une propriété `installed`, un `visible` qui en dépend.
+`Tapo.qml` suit ce motif — une sonde `Process` au démarrage, une propriété
+`installed`, un `visible` qui en dépend.
 
 ### Domotique Tapo
 
