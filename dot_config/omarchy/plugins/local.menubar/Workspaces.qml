@@ -4,16 +4,18 @@ import Quickshell
 import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
+import "WorkspacesModel.js" as Model
 
 // Switcher de workspaces Hyprland, par ecran.
 //
 // Chaque ecran a ses propres `slotsPerScreen` workspaces, et cette barre-ci ne
-// montre que ceux du sien : les deux ecrans affichent donc 1..5 en meme temps.
+// montre que ceux du sien : les deux ecrans affichent donc 一..五 en meme temps.
 // Sous le capot les identifiants restent globaux — Hyprland n'en connait pas
 // d'autres — et l'ecran de droite se voit attribuer la tranche 6..10. Le
 // decoupage est pose par ~/.config/hypr/workspaces.lua, qui epingle chaque
 // tranche a son ecran ; on se contente ici de le refleter, en reetiquetant les
-// pastilles 1..5 pour qu'elles correspondent aux touches SUPER+1..5.
+// pastilles 一..五 pour qu'elles correspondent aux touches SUPER+1..5. Les
+// numeros s'ecrivent en kanji, voir WorkspacesModel.js.
 BarWidget {
   id: root
   moduleName: "local.menubar.workspaces"
@@ -86,7 +88,7 @@ BarWidget {
   }
 
   // Ecrans de gauche a droite, puis de haut en bas — le meme ordre que
-  // workspaces.lua, pour que la pastille "3" et la touche SUPER+3 designent bien
+  // workspaces.lua, pour que la pastille "三" et la touche SUPER+3 designent bien
   // le meme workspace. On n'ordonne pas par `id`, que Hyprland reattribue au
   // branchement.
   readonly property int slotBase: {
@@ -132,7 +134,7 @@ BarWidget {
     return null
   }
 
-  // Les `slotsPerScreen` pastilles de cet ecran, etiquetees 1..5 quelle que soit
+  // Les `slotsPerScreen` pastilles de cet ecran, etiquetees 一..五 quelle que soit
   // la tranche. Elles restent toutes visibles meme vides : workspaces.lua les
   // declare `persistent`, et la barre ne se decale donc pas quand on ferme le
   // dernier client d'un workspace.
@@ -144,7 +146,7 @@ BarWidget {
     var entries = []
 
     for (var slot = 1; slot <= root.slotsPerScreen; slot++) {
-      entries.push({ id: base + slot, label: String(slot) })
+      entries.push({ id: base + slot, label: Model.kanjiNumeral(slot) })
     }
 
     // Un workspace hors tranche a pu atterrir sur cet ecran — une regle
@@ -166,7 +168,7 @@ BarWidget {
       var owner = root.monitorNameOf(workspace)
       if (owner === "" || owner !== name) continue
 
-      entries.push({ id: workspace.id, label: String(workspace.id) })
+      entries.push({ id: workspace.id, label: Model.kanjiNumeral(workspace.id) })
     }
 
     entries.sort(function(left, right) { return left.id - right.id })
@@ -209,7 +211,7 @@ BarWidget {
 
         // Halo de survol, dans la meme teinte que le workspace actif. Il deborde
         // du padding de l'ilot : les pastilles extremes en epousent alors les
-        // bords, et celles du milieu restent centrees sur leur chiffre.
+        // bords, et celles du milieu restent centrees sur leur numero.
         Rectangle {
           anchors.fill: parent
           anchors.leftMargin: -root.haloInsetX
@@ -262,7 +264,9 @@ BarWidget {
           foreground: urgent ? Color.bar.background
                              : (root.bar ? root.bar.barForeground : Color.foreground)
           opacity: occupied || current || urgent ? 1 : 0.4
-          fixedWidth: root.vertical ? root.islandSize : Style.space(20)
+          // Un id hors tranche peut s'ecrire en plusieurs kanji (十一) : la
+          // pastille s'elargit alors plutot que de deborder sur sa voisine.
+          fixedWidth: root.vertical ? root.islandSize : Math.max(Style.space(20), labelWidth + Style.space(6))
           fixedHeight: root.islandSize
           onPressed: function(mouseButton) {
             if (mouseButton === Qt.LeftButton) root.focusWorkspace(cell.modelData.id)
