@@ -226,6 +226,45 @@ Le même script installe `python-kasa` dans un venv dédié
 d'Arch. Une machine sans compte Tapo ne reçoit rien de tout ça, et la pastille
 se retire d'elle-même de la barre.
 
+### WireGuard
+
+L'îlot au bouclier pilote les tunnels WireGuard de NetworkManager. Il permet
+d'activer et de couper chaque tunnel, de renommer ou supprimer un profil,
+d'importer un `.conf`, et affiche le trafic de la dernière minute. Il est
+inspiré de [omarchy-wireguard](https://github.com/VirtualDataPro/omarchy-wireguard)
+(MIT), dont la licence est reprise en tête du helper.
+
+| Fichier (dans `local.menubar/`) | Rôle                                                   |
+| ------------------------------- | ------------------------------------------------------ |
+| `WireGuard.qml`                 | la pastille et son panneau                             |
+| `WireGuardModel.js`             | débit, fenêtre du graphe, détection des coupures       |
+| `wireguard-backend.py`          | tout ce qui parle à NetworkManager ou touche une clé   |
+
+Règles à connaître :
+
+- **Un seul full tunnel à la fois.** Activer un tunnel dont les AllowedIPs
+  couvrent `0.0.0.0/0` ou `::/0` coupe d'abord les autres full tunnels. Si
+  l'activation échoue ensuite, rien n'est rétabli.
+- **Un import ne crée qu'un profil désactivé.** L'autoconnect est coupé et le
+  tunnel n'est jamais activé à l'import. La liste blanche est stricte : un
+  `.conf` avec `PostUp`, `Table`, `SaveConfig` ou `FwMark` est refusé, pas
+  importé à moitié.
+- **Les clés ne passent que par stdin**, jamais en argument, et ne ressortent
+  jamais du helper.
+- **Une coupure non demandée déclenche une notification critique.** Couper,
+  basculer ou supprimer depuis le panneau n'en déclenche aucune.
+- **Le sélecteur de fichiers est `zenity`**, lancé dans son propre processus.
+  Le `FileDialog` de Qt ouvrait un dialogue GTK dans le shell et le faisait
+  planter.
+
+Dépendances : `networkmanager`, `python-gobject`, `libnm`, `zenity`,
+`libnotify`. Après une modification de `WireGuard.qml`, il faut un
+`omarchy restart shell` : le rechargement à chaud garde l'ancienne version en
+cache tant que la barre l'utilise.
+
+Tests : `node --test tests/` et `python3 -I -B -m unittest discover -s tests`,
+depuis le dossier du plugin.
+
 ## Claude Code
 
 `dot_claude/` versionne ce qui est *réglage* — `settings.json`, agents, skills,
