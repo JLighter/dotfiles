@@ -358,6 +358,15 @@ Item {
 
               Island { Tapo { bar: root } }
 
+              // S'efface tant que NetworkManager n'a pas repondu. Lie a
+              // `available` et non a `visible` : un enfant d'ilot cache se lit
+              // toujours invisible, l'ilot ne se rouvrirait jamais.
+              Island {
+                visible: wireguardWidget.available
+
+                WireGuard { id: wireguardWidget; bar: root }
+              }
+
               // Dictee, ecrans, reseau et son partagent une seule pastille : ce
               // sont quatre reglages systeme voisins, et la jauge de volume
               // comme la waveform de dictee s'y deplient.
@@ -429,6 +438,12 @@ Item {
               Island { Notifications { bar: root } }
 
               Island { Tapo { bar: root } }
+
+              Island {
+                visible: wireguardWidgetVertical.available
+
+                WireGuard { id: wireguardWidgetVertical; bar: root }
+              }
 
               Island {
                 Column {
