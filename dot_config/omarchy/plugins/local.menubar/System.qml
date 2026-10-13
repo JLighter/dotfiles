@@ -5,12 +5,19 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Widget de charge systeme : CPU et memoire dans la barre, detail au clic.
+// Widget de charge systeme : CPU et memoire dans la barre, tableau de bord au clic.
 //
-// Tout vient de `system_stats.sh`, pose a cote de ce fichier, qui rassemble en
-// un seul appel ce que /proc et /sys exposent. Les compteurs CPU arrivent
-// bruts : le pourcentage se calcule ici, par difference entre deux releves,
-// car /proc/stat ne donne que des cumuls depuis le demarrage.
+// Le bouton de barre est celui de la menubar (puce, mesures au survol, halo
+// d'accent). Le panneau reprend celui de omarchy-system-monitor (Harshith
+// Chennupati, MIT, Panel.qml au commit 71599f7) : en-tete hote, tuiles CPU /
+// memoire / temperature, tuiles GPU, historique deux minutes, charge par coeur,
+// debit disque, capacite, bouton btop. Ecarts a l'amont : GPU NVIDIA
+// via nvidia-smi (l'amont ne le lit pas), pas de capteurs ni de ventilateurs
+// Apple Silicon, pas de mode d'affichage de barre a faire tourner, tuiles en
+// ilots sans lisere comme le reste de la menubar, et section reseau deplacee
+// dans le widget Network (ilot NET).
+//
+// La collecte vit dans SystemMetrics.qml, la logique pure dans SystemMetrics.js.
 BarWidget {
   id: root
   moduleName: "local.menubar.system"
@@ -30,6 +37,15 @@ BarWidget {
   readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
   readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
 
+  // Teintes du panneau. L'accent porte les mesures, sa version assombrie la
+  // seconde serie d'un graphe ; l'avertissement est un melange accent/urgent,
+  // la palette n'ayant pas de role « warning » propre.
+  readonly property color urgentColor: Color.urgent
+  readonly property color secondaryColor: Qt.darker(accentColor, 1.5)
+  readonly property color warningColor: Qt.tint(accentColor, Qt.rgba(urgentColor.r, urgentColor.g, urgentColor.b, 0.6))
+  readonly property color trackColor: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.12)
+  readonly property color chartGrid: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.18)
+
   readonly property string barPosition: bar ? bar.position : "top"
   readonly property int revealDistance: Style.space(12)
   readonly property int revealOffsetX: barPosition === "left"
@@ -45,198 +61,173 @@ BarWidget {
     return Item.Top
   }
 
-  // Au-dela de ce seuil, la mesure passe en accent.
+  // --- Seuils ----------------------------------------------------------------
+
+  // Bouton de barre : au-dela, la puce et ses mesures passent en accent.
   readonly property int alertThreshold: 80
 
   // Le GPU a son propre seuil thermique : une carte a 100 % de charge pendant un
   // rendu est normale, une carte a 80 °C ne l'est pas. Les deux conditions comptent.
   readonly property int gpuTempAlertThreshold: 80
 
-  // --- Etat ------------------------------------------------------------------
+  // Panneau : jauges en avertissement puis en critique, comme l'amont.
+  readonly property real warningThreshold: 80
+  readonly property real criticalThreshold: 95
 
-  property real cpuPercent: 0
-  property var corePercents: []
-  property real memTotalKib: 0
-  property real memUsedKib: 0
-  property real swapTotalKib: 0
-  property real swapUsedKib: 0
-  property var loadAverages: []
-  property real uptimeSeconds: 0
-  property var temperatures: []
-  property var topCpu: []
-  property var topMem: []
+  // Une temperature n'occupe qu'une bande utile : 57 °C dessine comme 57 % d'une
+  // jauge ferait passer une puce froide pour a moitie chargee. L'echelle part de 30.
+  readonly property real temperatureFloor: 30
+  readonly property real temperatureCeiling: 100
 
-  property string gpuName: ""
-  property real gpuPercent: -1
-  property real gpuVramUsedMib: 0
-  property real gpuVramTotalMib: 0
-  property real gpuCelsius: -1
-  property real gpuWatts: -1
-  property real gpuWattsLimit: -1
-  property real gpuClockMhz: -1
-  property real gpuFanPercent: -1
+  // --- Mesures ---------------------------------------------------------------
 
-  readonly property real memPercent: memTotalKib > 0 ? memUsedKib / memTotalKib * 100 : 0
-  readonly property real swapPercent: swapTotalKib > 0 ? swapUsedKib / swapTotalKib * 100 : 0
-
-  // La charge est le seul champ que toute carte NVIDIA renseigne : sa presence
-  // sert de test d'existence pour l'ensemble de la section.
-  readonly property bool gpuAvailable: gpuPercent >= 0
-  readonly property real gpuVramPercent: gpuVramTotalMib > 0 ? gpuVramUsedMib / gpuVramTotalMib * 100 : 0
-  readonly property bool gpuAlert: gpuAvailable
-    && (gpuPercent >= alertThreshold || gpuCelsius >= gpuTempAlertThreshold)
-
-  // Releve precedent, pour les differences de compteurs CPU.
-  property real prevCpuIdle: -1
-  property real prevCpuTotal: -1
-  property var prevCores: ({})
-
-  function ratioFromDelta(idle, total, previousIdle, previousTotal) {
-    if (previousIdle < 0 || previousTotal < 0) return 0
-
-    var totalDelta = total - previousTotal
-    if (totalDelta <= 0) return 0
-
-    var busy = totalDelta - (idle - previousIdle)
-    return Math.max(0, Math.min(100, busy / totalDelta * 100))
+  SystemMetrics {
+    id: metrics
+    panelOpen: root.opened
   }
 
-  function parseStats(raw) {
-    var nextCores = []
-    var nextCoreState = ({})
-    var nextTemps = []
-    var nextTopCpu = []
-    var nextTopMem = []
-    var sawGpu = false
-    var lines = String(raw || "").split("\n")
+  readonly property bool hasGpuUsage: metrics.gpuPercent >= 0
+  readonly property bool hasGpuTemperature: metrics.gpuTemperature >= 0
+  readonly property bool hasGpuVram: metrics.gpuVramTotal > 0 && metrics.gpuVramUsed >= 0
+  readonly property bool hasGpu: hasGpuUsage || hasGpuTemperature
+  readonly property int gpuTileCount: (hasGpuUsage ? 1 : 0) + (hasGpuTemperature ? 1 : 0) + (hasGpuVram ? 1 : 0)
 
-    for (var i = 0; i < lines.length; i++) {
-      var parts = lines[i].split("\t")
-      var key = parts[0]
+  readonly property real gpuVramPercent: hasGpuVram
+    ? Math.max(0, Math.min(100, metrics.gpuVramUsed * 100 / metrics.gpuVramTotal))
+    : -1
 
-      if (key === "cpu" && parts.length >= 3) {
-        var idle = Number(parts[1])
-        var total = Number(parts[2])
-        cpuPercent = ratioFromDelta(idle, total, prevCpuIdle, prevCpuTotal)
-        prevCpuIdle = idle
-        prevCpuTotal = total
-      } else if (key === "core" && parts.length >= 4) {
-        var coreName = parts[1]
-        var coreIdle = Number(parts[2])
-        var coreTotal = Number(parts[3])
-        var previous = prevCores[coreName]
-        nextCores.push(ratioFromDelta(coreIdle, coreTotal,
-                                      previous ? previous.idle : -1,
-                                      previous ? previous.total : -1))
-        nextCoreState[coreName] = { idle: coreIdle, total: coreTotal }
-      } else if (key === "mem" && parts.length >= 3) {
-        memTotalKib = Number(parts[1])
-        memUsedKib = Number(parts[2])
-      } else if (key === "swap" && parts.length >= 3) {
-        swapTotalKib = Number(parts[1])
-        swapUsedKib = Number(parts[2])
-      } else if (key === "load" && parts.length >= 4) {
-        loadAverages = [parts[1], parts[2], parts[3]]
-      } else if (key === "uptime" && parts.length >= 2) {
-        uptimeSeconds = Number(parts[1])
-      } else if (key === "gpuname" && parts.length >= 2) {
-        gpuName = parts[1]
-      } else if (key === "gpu" && parts.length >= 9) {
-        gpuPercent = Number(parts[1])
-        gpuVramUsedMib = Number(parts[2])
-        gpuVramTotalMib = Number(parts[3])
-        gpuCelsius = Number(parts[4])
-        gpuWatts = Number(parts[5])
-        gpuWattsLimit = Number(parts[6])
-        gpuClockMhz = Number(parts[7])
-        gpuFanPercent = Number(parts[8])
-        sawGpu = true
-      } else if (key === "temp" && parts.length >= 3) {
-        nextTemps.push({ label: parts[1], celsius: Number(parts[2]) / 1000 })
-      } else if (key === "topcpu" && parts.length >= 4) {
-        nextTopCpu.push({ cpu: Number(parts[1]), mem: Number(parts[2]), name: parts[3] })
-      } else if (key === "topmem" && parts.length >= 4) {
-        nextTopMem.push({ cpu: Number(parts[1]), mem: Number(parts[2]), name: parts[3] })
-      }
-    }
-
-    // Reaffectation en bloc : muter un tableau en place ne notifie pas les
-    // bindings qui en dependent.
-    corePercents = nextCores
-    prevCores = nextCoreState
-    temperatures = nextTemps
-    topCpu = nextTopCpu
-    topMem = nextTopMem
-
-    // Un pilote qui tombe, ou une carte debranchee a chaud : sans cette remise a
-    // zero le widget continuerait d'afficher le dernier releve comme s'il etait vif.
-    if (!sawGpu) {
-      gpuPercent = -1
-      gpuName = ""
-    }
-  }
-
-  Process {
-    id: statsProc
-
-    readonly property string scriptPath: String(Qt.resolvedUrl("system_stats.sh")).replace(/^file:\/\//, "")
-
-    command: ["bash", scriptPath]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.parseStats(text)
-    }
-  }
-
-  // Cadence resserree quand le panneau est ouvert, relachee sinon : la barre
-  // n'a besoin que d'une tendance, et chaque releve forke awk et ps.
-  Timer {
-    interval: root.opened ? 1500 : 3000
-    running: true
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: if (!statsProc.running) statsProc.running = true
-  }
+  readonly property bool gpuAlert: metrics.gpuPercent >= alertThreshold
+    || metrics.gpuTemperature >= gpuTempAlertThreshold
 
   // --- Formatage -------------------------------------------------------------
 
-  function formatGib(kib) {
-    var gib = Number(kib || 0) / 1048576
-    return gib >= 10 ? gib.toFixed(0) + " GiB" : gib.toFixed(1) + " GiB"
+  function percent(value) {
+    return isFinite(value) && value >= 0 ? Math.round(value) + "%" : "—"
+  }
+
+  function formatBytes(value) {
+    var amount = Number(value)
+    if (!isFinite(amount) || amount < 0) return "—"
+    var units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    var index = 0
+    while (amount >= 1024 && index < units.length - 1) {
+      amount /= 1024
+      index++
+    }
+    var digits = index >= 3 ? 1 : (amount >= 100 ? 0 : 1)
+    return amount.toFixed(digits) + " " + units[index]
+  }
+
+  // « 3.6 / 7.3 GiB » : une seule unite pour la paire, qui reste assez courte
+  // pour une tuile d'un tiers de panneau.
+  function formatPair(used, total) {
+    var totalBytes = Number(total)
+    if (!isFinite(totalBytes) || totalBytes <= 0) return "—"
+    var units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    var index = 0
+    var scale = 1
+    while (totalBytes / scale >= 1024 && index < units.length - 1) {
+      scale *= 1024
+      index++
+    }
+    var digits = index >= 3 ? 1 : 0
+    return (Number(used) / scale).toFixed(digits) + " / " + (totalBytes / scale).toFixed(digits) + " " + units[index]
+  }
+
+  function formatRate(value) {
+    return isFinite(value) && value >= 0 ? formatBytes(value) + "/s" : "—"
   }
 
   function formatUptime(seconds) {
-    var total = Math.max(0, Math.floor(Number(seconds || 0)))
-    var days = Math.floor(total / 86400)
-    var hours = Math.floor((total % 86400) / 3600)
-    var minutes = Math.floor((total % 3600) / 60)
-
-    if (days > 0) return days + " d " + hours + " h"
-    if (hours > 0) return hours + " h " + minutes + " min"
-    return minutes + " min"
+    var totalMinutes = Math.floor(Number(seconds) / 60)
+    if (!isFinite(totalMinutes) || totalMinutes < 0) return "—"
+    var days = Math.floor(totalMinutes / 1440)
+    var hours = Math.floor((totalMinutes % 1440) / 60)
+    var minutes = totalMinutes % 60
+    if (days > 0) return days + "d " + hours + "h"
+    if (hours > 0) return hours + "h " + minutes + "m"
+    return minutes + "m"
   }
 
-  // nvidia-smi rend la VRAM en mebioctets, la memoire systeme arrive en kibioctets.
-  function formatMib(mib) {
-    return formatGib(Number(mib || 0) * 1024)
+  function loadText() {
+    function one(value) { return value >= 0 ? value.toFixed(2) : "—" }
+    return one(metrics.loadOne) + " / " + one(metrics.loadFive) + " / " + one(metrics.loadFifteen)
   }
 
-  // Les champs qu'une carte ne renseigne pas valent -1 : on les affiche en tiret
-  // plutot que de laisser passer un « -1 W » qui ressemblerait a une mesure.
-  function formatOptional(value, suffix, decimals) {
-    if (Number(value) < 0) return "—"
-    return Number(value).toFixed(decimals === undefined ? 0 : decimals) + suffix
+  function temperatureText(value) {
+    return value >= 0 ? Math.round(value) + "°C" : "—"
   }
 
-  function alertColorFor(percent) {
-    return Number(percent || 0) >= root.alertThreshold ? root.accentColor : root.foregroundColor
+  function temperatureDetail(value) {
+    if (value < 0) return "Unavailable"
+    return value >= 85 ? "Warm" : "Normal"
+  }
+
+  function temperatureBandMeter(value) {
+    if (!isFinite(value) || value < 0) return -1
+    var span = temperatureCeiling - temperatureFloor
+    return Math.max(0, Math.min(100, (value - temperatureFloor) * 100 / span))
+  }
+
+  function levelColor(value, warn, crit) {
+    if (!isFinite(value) || value < 0) return root.mutedColor
+    if (value >= crit) return root.urgentColor
+    if (value >= warn) return root.warningColor
+    return root.accentColor
+  }
+
+  // Row ignore les enfants invisibles : le diviseur est le nombre de tuiles
+  // que cette carte sait remplir.
+  function gpuTileWidth(rowWidth, spacing) {
+    var count = Math.max(1, gpuTileCount)
+    return (rowWidth - spacing * (count - 1)) / count
+  }
+
+  // nvme0n1 → nvme0, mmcblk0 → mmc0 ; sda et consorts sont deja courts.
+  function shortDiskName(name) {
+    var text = String(name || "")
+    var nvme = text.match(/^nvme(\d+)n\d+$/)
+    if (nvme) return "nvme" + nvme[1]
+    var mmc = text.match(/^mmcblk(\d+)$/)
+    if (mmc) return "mmc" + mmc[1]
+    return text
+  }
+
+  // La ligne donne un debit cumule : passe le premier disque, les noms ne
+  // disent plus rien, on les resume en un compte.
+  function diskLabelText() {
+    var devices = metrics.diskDevices
+    if (!devices || devices.length === 0) return "DISK"
+    if (devices.length === 1) return "DISK · " + shortDiskName(devices[0])
+    return "DISK · " + shortDiskName(devices[0]) + " +" + (devices.length - 1)
+  }
+
+  function mountBasename(mount) {
+    var segments = String(mount).split("/")
+    return segments[segments.length - 1] || String(mount)
+  }
+
+  // Dernier segment du chemin (/mnt/data → « data ») ; chemin complet quand
+  // deux montages partagent ce segment.
+  function mountLabel(mount) {
+    var target = String(mount)
+    var base = mountBasename(target)
+    var mounts = metrics.extraFilesystems
+    for (var i = 0; i < mounts.length; i++) {
+      var other = String(mounts[i].mount)
+      if (other !== target && mountBasename(other) === base) return target
+    }
+    return base
   }
 
   // Glyphes Nerd Font, verifies presents dans JetBrainsMono.
   readonly property string glyphCpu: "󰻠"
-  readonly property string glyphMemory: "󰍛"
-  readonly property string glyphTemperature: "󰔏"
-  readonly property string glyphLoad: "󰓅"
+  // RAM et VRAM cote a cote dans la barre : quatre formes distinctes pour
+  // quatre mesures (puce CPU, barrette RAM, carte GPU, carte memoire VRAM),
+  // sinon rien ne dit quel pourcentage est lequel. Verifies au rendu a la
+  // taille de la barre : la puce « memory » (U+F035B) se confond avec la puce CPU.
+  readonly property string glyphMemory: ""
+  readonly property string glyphVram: "󰑹"
   readonly property string glyphGpu: "󰢮"
 
   // --- Ouverture -------------------------------------------------------------
@@ -245,7 +236,6 @@ BarWidget {
 
   function open() {
     opened = true
-    if (!statsProc.running) statsProc.running = true
   }
 
   function close() {
@@ -259,6 +249,16 @@ BarWidget {
   function closeForPopoutSwitch() {
     close()
   }
+
+  function launchBtop() {
+    if (bar) bar.run("omarchy-launch-or-focus-tui btop")
+    close()
+  }
+
+  // Curseur clavier sur le bouton btop, seul element actionnable du panneau.
+  property bool cursorActive: false
+
+  onOpenedChanged: if (opened) cursorActive = false
 
   readonly property bool primaryInstance: {
     var window = root.QsWindow ? root.QsWindow.window : null
@@ -275,6 +275,7 @@ BarWidget {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
+    function refresh(): string { metrics.sample(); return "ok" }
   }
 
   // --- Bouton de barre -------------------------------------------------------
@@ -295,8 +296,8 @@ BarWidget {
   }
 
   // L'ensemble passe en accent des qu'une des mesures s'emballe.
-  readonly property color readingColor: cpuPercent >= alertThreshold
-      || memPercent >= alertThreshold
+  readonly property color readingColor: metrics.cpuPercent >= alertThreshold
+      || metrics.memoryPercent >= alertThreshold
       || gpuAlert
     ? accentColor
     : foregroundColor
@@ -353,12 +354,13 @@ BarWidget {
       // Le premier pourcentage n'a pas de glyphe : il revient a la puce centree
       // dans l'ilot, a gauche. Les suivants portent le leur.
       text: {
-        var reading = Math.round(root.cpuPercent) + "%"
-          + "  " + root.glyphMemory + " " + Math.round(root.memPercent) + "%"
+        var reading = Math.round(Math.max(0, metrics.cpuPercent)) + "%"
+          // La barrette deborde sa cellule : une espace de plus la detache du nombre.
+          + "  " + root.glyphMemory + "  " + Math.round(Math.max(0, metrics.memoryPercent)) + "%"
 
-        if (root.gpuAvailable) {
-          reading += "  " + root.glyphGpu + " " + Math.round(root.gpuPercent) + "%"
-            + "  " + root.glyphMemory + " " + Math.round(root.gpuVramPercent) + "%"
+        if (root.hasGpuUsage) {
+          reading += "  " + root.glyphGpu + " " + Math.round(metrics.gpuPercent) + "%"
+          if (root.hasGpuVram) reading += "  " + root.glyphVram + " " + Math.round(root.gpuVramPercent) + "%"
         }
 
         return reading
@@ -397,14 +399,21 @@ BarWidget {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(340))
-    contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(760))
+    contentWidth: panel.fittedContentWidth(Style.space(380))
+    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight,
+                                             Style.space(760 + metrics.extraFilesystems.length * 40))
 
     PanelKeyCatcher {
       id: keyCatcher
 
       anchors.fill: parent
       onCloseRequested: root.close()
+      onMoveRequested: function(dx, dy) { root.cursorActive = true }
+      onActivateRequested: if (root.cursorActive) root.launchBtop()
+      onTextKey: function(text) {
+        if (text === "r" || text === "R") metrics.sample()
+        else if (text === "b" || text === "B") root.launchBtop()
+      }
 
       ScrollView {
         id: scrollArea
@@ -412,7 +421,7 @@ BarWidget {
         anchors.fill: parent
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-        ScrollBar.vertical.policy: content.implicitHeight > height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+        ScrollBar.vertical.policy: panelColumn.implicitHeight > height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
 
         opacity: root.opened ? 1 : 0
         scale: root.opened ? 1 : 0.97
@@ -430,265 +439,352 @@ BarWidget {
         Behavior on scale { NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing } }
 
         Column {
-          id: content
+          id: panelColumn
 
           width: scrollArea.availableWidth
-          spacing: Style.space(12)
+          spacing: Style.space(9)
 
-          // ---- En-tete ----
-          PanelIsland {
+          // ---- En-tete : hote, uptime, charge ----
+          PanelHero {
+            width: parent.width
+            title: metrics.hostname !== "" ? metrics.hostname : "System"
+            meta: "Up " + root.formatUptime(metrics.uptimeSeconds) + " · Load " + root.loadText()
+            foreground: root.foregroundColor
+            fontFamily: root.fontFamily
 
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight)
-
+            iconComponent: Component {
               Text {
-                id: heroIcon
-
                 text: root.glyphCpu
-                color: root.alertColorFor(root.cpuPercent)
+                color: root.foregroundColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.display
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
               }
+            }
 
-              Column {
-                id: heroLabels
-
-                anchors.left: heroIcon.right
-                anchors.leftMargin: Style.space(14)
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(2)
-
-                Text {
-                  text: "System"
-                  color: root.foregroundColor
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.title
-                  font.bold: true
-                  elide: Text.ElideRight
-                  width: parent.width
-                }
-
-                Text {
-                  text: "UP " + root.formatUptime(root.uptimeSeconds).toUpperCase()
-                  color: root.mutedColor
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  font.letterSpacing: 1.2
-                  elide: Text.ElideRight
-                  width: parent.width
-                }
+            trailingControl: Component {
+              PanelActionButton {
+                iconText: "󰑐"
+                tooltipText: "Refresh (R)"
+                foreground: root.foregroundColor
+                hoverColor: root.accentColor
+                fontFamily: root.fontFamily
+                onClicked: metrics.sample()
               }
             }
           }
 
-          // ---- Processeur ----
-          PanelIsland {
+          PanelSeparator { foreground: root.foregroundColor }
 
-            SectionHeader {
-              text: "CPU"
-              value: Math.round(root.cpuPercent) + "%"
-              alert: root.cpuPercent >= root.alertThreshold
+          // ---- Mesures principales ----
+          Row {
+            width: parent.width
+            spacing: Style.space(8)
+
+            StatTile {
+              width: (parent.width - parent.spacing * 2) / 3
+              title: "CPU"
+              value: root.percent(metrics.cpuPercent)
+              detail: metrics.perCore.length > 0 ? metrics.perCore.length + " threads" : "—"
+              meter: metrics.cpuPercent
+              meterColor: root.levelColor(metrics.cpuPercent, root.warningThreshold, root.criticalThreshold)
+              alarming: metrics.cpuPercent >= root.criticalThreshold
             }
 
-            Gauge { value: root.cpuPercent }
-
-            DetailRow {
-              label: "Load average"
-              value: root.loadAverages.length === 3
-                ? root.loadAverages[0] + "  " + root.loadAverages[1] + "  " + root.loadAverages[2]
-                : "—"
+            StatTile {
+              width: (parent.width - parent.spacing * 2) / 3
+              title: "MEMORY"
+              value: root.percent(metrics.memoryPercent)
+              detail: root.formatPair(metrics.memoryUsed, metrics.memoryTotal)
+              meter: metrics.memoryPercent
+              meterColor: root.levelColor(metrics.memoryPercent, root.warningThreshold, root.criticalThreshold)
+              alarming: metrics.memoryPercent >= root.criticalThreshold
             }
 
-            DetailRow {
-              label: "Cores"
-              value: String(root.corePercents.length)
+            StatTile {
+              width: (parent.width - parent.spacing * 2) / 3
+              title: "TEMP"
+              value: root.temperatureText(metrics.cpuTemperature)
+              detail: root.temperatureDetail(metrics.cpuTemperature)
+              meter: root.temperatureBandMeter(metrics.cpuTemperature)
+              meterColor: root.levelColor(metrics.cpuTemperature, 85, 95)
+              alarming: metrics.cpuTemperature >= 95
+            }
+          }
+
+          // ---- GPU ----
+          // Masque sans carte lisible : la disposition retombe sur trois tuiles.
+          Row {
+            width: parent.width
+            spacing: Style.space(8)
+            visible: root.hasGpu
+
+            StatTile {
+              visible: root.hasGpuUsage
+              width: root.gpuTileWidth(parent.width, parent.spacing)
+              title: "GPU"
+              value: root.percent(metrics.gpuPercent)
+              detail: root.hasGpuVram ? root.formatBytes(metrics.gpuVramTotal) + " VRAM" : "—"
+              meter: metrics.gpuPercent
+              meterColor: root.levelColor(metrics.gpuPercent, root.warningThreshold, root.criticalThreshold)
+              alarming: metrics.gpuPercent >= root.criticalThreshold
             }
 
-            // Une colonne par coeur, hauteur proportionnelle a sa charge.
+            StatTile {
+              visible: root.hasGpuTemperature
+              width: root.gpuTileWidth(parent.width, parent.spacing)
+              title: "GPU TEMP"
+              value: root.temperatureText(metrics.gpuTemperature)
+              detail: root.temperatureDetail(metrics.gpuTemperature)
+              meter: root.temperatureBandMeter(metrics.gpuTemperature)
+              meterColor: root.levelColor(metrics.gpuTemperature, 85, 95)
+              alarming: metrics.gpuTemperature >= 95
+            }
+
+            StatTile {
+              visible: root.hasGpuVram
+              width: root.gpuTileWidth(parent.width, parent.spacing)
+              title: "VRAM"
+              value: root.percent(root.gpuVramPercent)
+              detail: root.formatPair(metrics.gpuVramUsed, metrics.gpuVramTotal)
+              meter: root.gpuVramPercent
+              meterColor: root.levelColor(root.gpuVramPercent, root.warningThreshold, root.criticalThreshold)
+              alarming: root.gpuVramPercent >= root.criticalThreshold
+            }
+          }
+
+          PanelSeparator { foreground: root.foregroundColor }
+
+          // ---- Historique CPU, memoire, GPU ----
+          Column {
+            width: parent.width
+            spacing: Style.space(6)
+
+            SectionHeading {
+              title: root.hasGpuUsage ? "CPU, MEMORY & GPU" : "CPU & MEMORY"
+              value: "2 MIN"
+            }
+
             Item {
               width: parent.width
-              implicitHeight: Style.space(26)
-              visible: root.corePercents.length > 0
+              height: Style.space(70)
+
+              SystemSparkline {
+                anchors.fill: parent
+                points: metrics.cpuHistory
+                lineColor: root.accentColor
+                fillColor: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.16)
+                gridColor: root.chartGrid
+                gridLevels: [0.25, 0.5, 0.75]
+                fixedMaximum: 100
+              }
+
+              SystemSparkline {
+                anchors.fill: parent
+                points: metrics.memoryHistory
+                lineColor: root.secondaryColor
+                fillColor: "transparent"
+                dashed: true
+                lineWidth: 1.2
+                fixedMaximum: 100
+              }
+
+              SystemSparkline {
+                anchors.fill: parent
+                visible: root.hasGpuUsage
+                points: metrics.gpuHistory
+                lineColor: root.warningColor
+                fillColor: "transparent"
+                lineWidth: 1.2
+                fixedMaximum: 100
+              }
+
+              // L'echelle est fixee a 100 % : le dire, sinon une machine au
+              // repos ressemble a une boite vide.
+              Text {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                text: "100%"
+                color: root.mutedColor
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
 
               Row {
-                id: coreRow
+                anchors.top: parent.top
+                anchors.right: parent.right
+                spacing: Style.space(8)
+                LegendDot { colorValue: root.accentColor; label: "CPU" }
+                LegendDot { colorValue: root.secondaryColor; label: "RAM" }
+                LegendDot { visible: root.hasGpuUsage; colorValue: root.warningColor; label: "GPU" }
+              }
+            }
+          }
 
-                anchors.fill: parent
-                anchors.topMargin: Style.space(4)
-                spacing: Style.space(2)
+          PanelSeparator { foreground: root.foregroundColor }
 
-                readonly property int columnWidth: root.corePercents.length > 0
-                  ? (width - spacing * (root.corePercents.length - 1)) / root.corePercents.length
-                  : 0
+          // ---- Charge par coeur ----
+          Column {
+            width: parent.width
+            spacing: Style.space(6)
+            visible: metrics.perCore.length > 0
 
-                Repeater {
-                  model: root.corePercents
+            SectionHeading {
+              title: "CORES"
+              value: metrics.perCore.length + " threads · peak " + root.percent(metrics.coreMaximum)
+            }
 
-                  Item {
-                    required property var modelData
+            Row {
+              id: coreStrip
 
-                    width: coreRow.columnWidth
-                    height: coreRow.height
+              width: parent.width
+              height: Style.space(18)
+              spacing: Style.space(3)
 
-                    Rectangle {
-                      anchors.bottom: parent.bottom
-                      width: parent.width
-                      height: Math.max(Style.space(2), parent.height * Math.max(0, Math.min(100, modelData)) / 100)
-                      radius: Style.space(1)
-                      color: modelData >= root.alertThreshold ? root.accentColor : root.foregroundColor
-                      opacity: modelData >= root.alertThreshold ? 1 : 0.45
+              readonly property real cellWidth: metrics.perCore.length > 0
+                ? (width - spacing * (metrics.perCore.length - 1)) / metrics.perCore.length
+                : 0
+              // Les nombres ne tiennent qu'au-dessus de quatre caracteres environ ;
+              // en dessous, la teinte porte seule la mesure.
+              readonly property bool showValues: cellWidth >= Style.space(30)
 
-                      Behavior on height {
-                        NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
-                      }
-                    }
+              Repeater {
+                model: metrics.perCore
+
+                Rectangle {
+                  id: coreCell
+                  required property var modelData
+
+                  readonly property real load: Math.max(0, Math.min(100, modelData.percent)) / 100
+
+                  width: coreStrip.cellWidth
+                  height: coreStrip.height
+                  radius: Style.cornerRadius
+                  color: root.trackColor
+
+                  // Une teinte plutot qu'une barre : un coeur a 5 % dessine en
+                  // barre fait un trait d'un pixel qui passe pour un artefact.
+                  Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: root.levelColor(coreCell.modelData.percent, root.warningThreshold, root.criticalThreshold)
+                    opacity: 0.12 + 0.68 * coreCell.load
+                  }
+
+                  Text {
+                    anchors.centerIn: parent
+                    visible: coreStrip.showValues
+                    text: root.percent(coreCell.modelData.percent)
+                    color: root.foregroundColor
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
                   }
                 }
               }
             }
           }
 
-          // ---- Carte graphique ----
-          PanelIsland {
-            visible: root.gpuAvailable
+          PanelSeparator { foreground: root.foregroundColor }
 
-            SectionHeader {
-              text: "GPU"
-              value: Math.round(root.gpuPercent) + "%"
-              alert: root.gpuAlert
-            }
+          // ---- Disque ----
+          // Une ligne de lecture : son historique est le moins regarde du
+          // panneau. Le debit reseau vit dans le widget Network.
+          Column {
+            width: parent.width
+            spacing: Style.space(8)
 
-            // Le modele en sous-titre plutot qu'en ligne de detail : « NVIDIA
-            // GeForce RTX 3070 » deborderait la colonne de droite, etroite.
-            Text {
+            Item {
               width: parent.width
-              text: root.gpuName
-              visible: text !== ""
-              color: root.mutedColor
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              elide: Text.ElideRight
-            }
+              implicitHeight: Math.max(diskName.implicitHeight, diskRates.implicitHeight)
 
-            Gauge { value: root.gpuPercent }
+              PanelSectionHeader {
+                id: diskName
 
-            DetailRow {
-              label: "VRAM"
-              value: root.gpuVramTotalMib > 0
-                ? root.formatMib(root.gpuVramUsedMib) + " / " + root.formatMib(root.gpuVramTotalMib)
-                : "—"
-            }
+                text: root.diskLabelText()
+                foreground: root.foregroundColor
+                fontFamily: root.fontFamily
+                elide: Text.ElideRight
+                anchors.left: parent.left
+                anchors.right: diskRates.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+              }
 
-            Gauge { value: root.gpuVramPercent }
+              Row {
+                id: diskRates
 
-            DetailRow {
-              label: "Temperature"
-              value: root.formatOptional(root.gpuCelsius, " °C")
-            }
+                spacing: Style.space(14)
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
 
-            DetailRow {
-              label: "Power"
-              visible: root.gpuWatts >= 0
-              value: root.gpuWattsLimit >= 0
-                ? root.formatOptional(root.gpuWatts, " W") + " / " + root.formatOptional(root.gpuWattsLimit, " W")
-                : root.formatOptional(root.gpuWatts, " W")
-            }
+                RateLabel {
+                  glyph: "W"
+                  glyphColor: root.accentColor
+                  value: metrics.diskWriteBps
+                }
 
-            DetailRow {
-              label: "Clock"
-              visible: root.gpuClockMhz >= 0
-              value: root.formatOptional(root.gpuClockMhz, " MHz")
-            }
-
-            DetailRow {
-              label: "Fan"
-              visible: root.gpuFanPercent >= 0
-              value: root.formatOptional(root.gpuFanPercent, "%")
+                RateLabel {
+                  glyph: "R"
+                  glyphColor: root.secondaryColor
+                  value: metrics.diskReadBps
+                }
+              }
             }
           }
 
-          // ---- Memoire ----
-          PanelIsland {
+          PanelSeparator { foreground: root.foregroundColor }
 
-            SectionHeader {
-              text: "MEMORY"
-              value: Math.round(root.memPercent) + "%"
-              alert: root.memPercent >= root.alertThreshold
+          // ---- Capacite ----
+          Column {
+            width: parent.width
+            spacing: Style.space(6)
+
+            SectionHeading { title: "CAPACITY" }
+
+            CapacityRow {
+              label: "Root filesystem"
+              value: root.formatPair(metrics.filesystemUsed, metrics.filesystemTotal)
+              percentValue: metrics.filesystemPercent
             }
 
-            Gauge { value: root.memPercent }
-
-            DetailRow {
-              label: "Used"
-              value: root.formatGib(root.memUsedKib) + " / " + root.formatGib(root.memTotalKib)
-            }
-
-            DetailRow {
+            CapacityRow {
+              visible: metrics.swapTotal > 0
               label: "Swap"
-              visible: root.swapTotalKib > 0
-              value: root.formatGib(root.swapUsedKib) + " / " + root.formatGib(root.swapTotalKib)
+              value: root.formatPair(metrics.swapUsed, metrics.swapTotal)
+              percentValue: metrics.swapPercent
             }
-          }
-
-          // ---- Temperatures ----
-          PanelIsland {
-            visible: root.temperatures.length > 0
-
-            SectionHeader { text: "TEMPERATURES" }
 
             Repeater {
-              model: root.temperatures
+              model: metrics.extraFilesystems
 
-              DetailRow {
+              CapacityRow {
                 required property var modelData
 
-                width: parent.width
-                label: modelData.label
-                value: Math.round(modelData.celsius) + " °C"
+                label: root.mountLabel(modelData.mount)
+                value: root.formatPair(modelData.used, modelData.total)
+                percentValue: modelData.percent
               }
             }
           }
 
-          // ---- Processus les plus gourmands ----
-          PanelIsland {
-            visible: root.topCpu.length > 0
+          PanelSeparator { foreground: root.foregroundColor }
 
-            SectionHeader { text: "TOP CPU" }
+          // ---- Action ----
+          Button {
+            id: btopButton
 
-            Repeater {
-              model: root.topCpu
-
-              DetailRow {
-                required property var modelData
-
-                width: parent.width
-                label: modelData.name
-                value: modelData.cpu.toFixed(1) + "%"
-              }
-            }
-          }
-
-          PanelIsland {
-            visible: root.topMem.length > 0
-
-            SectionHeader { text: "TOP MEMORY" }
-
-            Repeater {
-              model: root.topMem
-
-              DetailRow {
-                required property var modelData
-
-                width: parent.width
-                label: modelData.name
-                value: modelData.mem.toFixed(1) + "%"
-              }
-            }
+            width: parent.width
+            iconText: "󰆍"
+            text: "Open btop"
+            tooltipText: "Open btop (B)"
+            bordered: true
+            foreground: root.foregroundColor
+            accent: root.accentColor
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            iconSize: Style.font.icon
+            hasCursor: root.cursorActive
+            onHovered: function(isHovered) { if (isHovered) root.cursorActive = true }
+            onClicked: root.launchBtop()
           }
         }
       }
@@ -697,112 +793,220 @@ BarWidget {
 
   // --- Composants internes ---------------------------------------------------
 
-  component PanelIsland: Rectangle {
-    default property alias content: holder.data
-    property int padding: Style.space(10)
+  // Intitule a gauche, resume vivant a droite.
+  component SectionHeading: Item {
+    property string title: ""
+    property string value: ""
 
-    width: parent.width
-    implicitHeight: holder.implicitHeight + padding * 2
+    width: parent ? parent.width : 0
+    implicitHeight: Math.max(headingText.implicitHeight, valueText.implicitHeight)
+
+    PanelSectionHeader {
+      id: headingText
+
+      text: title
+      textFormat: Text.PlainText
+      foreground: root.foregroundColor
+      fontFamily: root.fontFamily
+      elide: Text.ElideRight
+      anchors.left: parent.left
+      anchors.right: valueText.visible ? valueText.left : parent.right
+      anchors.rightMargin: valueText.visible ? Style.space(8) : 0
+      anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Text {
+      id: valueText
+
+      text: value
+      visible: text !== ""
+      color: root.mutedColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      elide: Text.ElideRight
+      width: Math.min(implicitWidth, parent.width * 0.62)
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      horizontalAlignment: Text.AlignRight
+    }
+  }
+
+  component Meter: Rectangle {
+    id: meter
+
+    property real value: -1
+    property real maximum: 100
+    property color fillColor: root.accentColor
+
+    height: Style.space(3)
+    radius: height / 2
+    color: root.trackColor
+
+    Rectangle {
+      width: meter.width * Math.max(0, Math.min(1, meter.value / meter.maximum))
+      height: meter.height
+      radius: meter.radius
+      color: meter.fillColor
+
+      Behavior on width {
+        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+      }
+    }
+  }
+
+  // Ilot sans lisere, comme le reste de la menubar.
+  component StatTile: Rectangle {
+    id: tile
+
+    property string title: ""
+    property string value: "—"
+    property string detail: ""
+    property real meter: -1
+    property color meterColor: root.accentColor
+    property bool alarming: false
+
+    height: Style.space(80)
     radius: Style.cornerRadius
     color: root.islandFill
 
     Column {
-      id: holder
-
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.margins: parent.padding
-      spacing: Style.space(4)
+      anchors.margins: Style.space(9)
+      spacing: Style.space(2)
+
+      Text {
+        text: tile.title
+        color: root.mutedColor
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 1.2
+      }
+
+      Text {
+        text: tile.value
+        color: tile.alarming ? root.urgentColor : root.foregroundColor
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.title
+        font.bold: true
+      }
+
+      Text {
+        width: parent.width
+        text: tile.detail
+        color: root.mutedColor
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+      }
     }
-  }
 
-  component SectionHeader: Item {
-    id: sectionHeader
-
-    property alias text: header.text
-    property string value: ""
-    property bool alert: false
-
-    width: parent.width
-    implicitHeight: Math.max(header.implicitHeight, valueLabel.implicitHeight)
-
-    PanelSectionHeader {
-      id: header
-
-      foreground: root.foregroundColor
-      fontFamily: root.fontFamily
+    Meter {
       anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-    }
-
-    Text {
-      id: valueLabel
-
-      text: sectionHeader.value
-      visible: text !== ""
-      color: sectionHeader.alert ? root.accentColor : root.mutedColor
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: true
       anchors.right: parent.right
-      anchors.rightMargin: Style.space(6)
-      anchors.verticalCenter: parent.verticalCenter
+      anchors.bottom: parent.bottom
+      anchors.margins: Style.space(9)
+      value: tile.meter
+      fillColor: tile.meterColor
     }
   }
 
-  component DetailRow: Item {
-    id: detailRow
-
+  component LegendDot: Row {
+    property color colorValue: "white"
     property string label: ""
-    property string value: ""
 
-    width: parent.width
-    implicitHeight: Style.space(18)
+    spacing: Style.space(4)
+
+    Rectangle {
+      width: Style.space(6)
+      height: width
+      radius: width / 2
+      color: parent.colorValue
+      anchors.verticalCenter: parent.verticalCenter
+    }
 
     Text {
-      text: detailRow.label
+      text: parent.label
       color: root.mutedColor
       font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      elide: Text.ElideRight
-      width: parent.width - Style.space(90)
-      anchors.left: parent.left
-      anchors.leftMargin: Style.space(2)
+      font.pixelSize: Style.font.caption
       anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
+  // La lettre porte la couleur de sa serie, comme les fleches du widget Network.
+  component RateLabel: Row {
+    id: rate
+
+    property string glyph: ""
+    property color glyphColor: root.accentColor
+    property real value: -1
+
+    spacing: Style.space(4)
+
+    Text {
+      text: rate.glyph
+      color: rate.glyphColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
     }
 
     Text {
-      text: detailRow.value
+      text: root.formatRate(rate.value)
       color: root.foregroundColor
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
-      anchors.right: parent.right
-      anchors.rightMargin: Style.space(2)
-      anchors.verticalCenter: parent.verticalCenter
     }
   }
 
-  component Gauge: Rectangle {
-    id: gauge
+  component CapacityRow: Column {
+    id: capacity
 
-    property real value: 0
+    property string label: ""
+    property string value: "—"
+    property real percentValue: -1
 
-    width: parent.width - Style.space(4)
-    x: Style.space(2)
-    height: Math.max(3, Style.space(4))
-    radius: height / 2
-    color: root.bar ? Style.selectedFillFor(root.bar.foreground, Color.accent) : Color.muted
+    width: parent ? parent.width : 0
+    spacing: Style.space(3)
 
-    Rectangle {
-      width: parent.width * Math.max(0, Math.min(100, gauge.value)) / 100
-      height: parent.height
-      radius: parent.radius
-      color: root.accentColor
+    Item {
+      width: parent.width
+      implicitHeight: Math.max(capacityLabel.implicitHeight, capacityValue.implicitHeight)
 
-      Behavior on width {
-        NumberAnimation { duration: root.revealDuration; easing.type: root.revealEasing }
+      Text {
+        id: capacityLabel
+
+        text: capacity.label
+        // Les chemins de montage viennent de df : format fige, pour que
+        // Text.AutoText ne lise pas un chemin forge comme du texte riche.
+        textFormat: Text.PlainText
+        color: root.foregroundColor
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
       }
+
+      Text {
+        id: capacityValue
+
+        text: capacity.value
+        color: root.mutedColor
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+      }
+    }
+
+    Meter {
+      width: parent.width
+      value: capacity.percentValue
+      fillColor: root.levelColor(capacity.percentValue, root.warningThreshold, root.criticalThreshold)
     }
   }
 }
