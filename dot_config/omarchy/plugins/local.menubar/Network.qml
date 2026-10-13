@@ -5,14 +5,16 @@ import Quickshell.Io
 import Quickshell.Networking
 import qs.Commons
 import qs.Ui
+import "SystemMetrics.js" as SystemModel
 
 // Widget reseau autonome : etat de la connexion dans la barre, panneau au clic.
 // Reimplementation de `omarchy.network` — memes gestes et memes fonctions, sans
 // dependre du plugin natif.
 //
 // Bouton : clic gauche ou milieu ouvre le panneau, clic droit lance nmtui.
-// Panneau : connexion courante, details du lien, choix du resolveur DNS et
-// liste des reseaux Wi-Fi (scan, connexion, oubli).
+// Panneau : connexion courante, debit (graphe miroir sur deux minutes),
+// details du lien, choix du resolveur DNS et liste des reseaux Wi-Fi (scan,
+// connexion, oubli).
 //
 // L'etat du lien vient de `omarchy-network-status`, le helper qu'utilise deja
 // le widget natif ; le Wi-Fi passe par le service Networking de Quickshell.
@@ -36,6 +38,11 @@ BarWidget {
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color islandFill: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.06)
+
+  // Graphe de debit : l'accent pour la montee, sa version assombrie pour la
+  // descente, comme le panneau de omarchy-system-monitor.
+  readonly property color secondaryColor: Qt.darker(accentColor, 1.5)
+  readonly property color chartGrid: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.18)
 
   readonly property string barPosition: bar ? bar.position : "top"
   readonly property int revealDistance: Style.space(12)
@@ -77,6 +84,14 @@ BarWidget {
   property real downloadRate: 0
   property real uploadRate: 0
 
+  // Deux minutes de debits pour le graphe miroir de l'ilot NET. Les deux
+  // moities partagent une echelle : le pic se prend sur la paire, et l'en-tete
+  // imprime le nombre contre lequel le graphe est trace.
+  property var downloadHistory: []
+  property var uploadHistory: []
+  readonly property real throughputPeak: Math.max(SystemModel.peakValue(downloadHistory),
+                                                  SystemModel.peakValue(uploadHistory))
+
   function parseKeyValue(raw) {
     var out = {}
     var lines = String(raw || "").split("\n")
@@ -101,10 +116,14 @@ BarWidget {
       if (elapsed > 0.2) {
         downloadRate = Math.max(0, (rx - prevRxBytes) / elapsed)
         uploadRate = Math.max(0, (tx - prevTxBytes) / elapsed)
+        downloadHistory = SystemModel.appendHistory(downloadHistory, now * 1000, downloadRate)
+        uploadHistory = SystemModel.appendHistory(uploadHistory, now * 1000, uploadRate)
       }
     } else {
       downloadRate = 0
       uploadRate = 0
+      downloadHistory = []
+      uploadHistory = []
     }
 
     var type = String(next.type || "")
@@ -916,7 +935,7 @@ BarWidget {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(340))
-    contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(560))
+    contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(660))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -1022,6 +1041,57 @@ BarWidget {
             }
           }
 
+          // ---- Debit ----
+          // Repris du panneau de omarchy-system-monitor (Harshith Chennupati,
+          // MIT) : descente et montee ne s'additionnent jamais, la montee
+          // au-dessus de l'axe, la descente en dessous, sur une echelle commune.
+          PanelIsland {
+            visible: root.online
+
+            SectionHeader {
+              text: root.info.iface ? "NET · " + root.info.iface : "NET"
+              value: root.throughputPeak > 0 ? "±" + root.formatRate(root.throughputPeak) : ""
+            }
+
+            // La fleche porte la couleur de sa serie : la valeur se rattache a
+            // sa moitie du graphe sans seconde legende.
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(uploadLabel.implicitHeight, downloadLabel.implicitHeight)
+
+              RateLabel {
+                id: uploadLabel
+
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(2)
+                glyph: "↑"
+                glyphColor: root.accentColor
+                value: root.uploadRate
+              }
+
+              RateLabel {
+                id: downloadLabel
+
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(2)
+                glyph: "↓"
+                glyphColor: root.secondaryColor
+                value: root.downloadRate
+              }
+            }
+
+            SystemSparkline {
+              width: parent.width
+              height: Style.space(34)
+              points: root.uploadHistory
+              mirrorPoints: root.downloadHistory
+              lineColor: root.accentColor
+              mirrorLineColor: root.secondaryColor
+              gridColor: root.chartGrid
+              fixedMaximum: root.throughputPeak
+            }
+          }
+
           // ---- Details du lien ----
           PanelIsland {
             visible: root.online
@@ -1029,8 +1099,6 @@ BarWidget {
             SectionHeader { text: "LINK" }
 
             DetailRow { label: "Gateway"; value: root.gateway || "—" }
-            DetailRow { label: "Download"; value: root.formatRate(root.downloadRate) }
-            DetailRow { label: "Upload"; value: root.formatRate(root.uploadRate) }
             DetailRow { label: "Router"; value: root.formatPing(root.info.router_ping_ms) }
             DetailRow { label: "Internet"; value: root.formatPing(root.info.internet_ping_ms) }
             // Sous la latence, dont elle est le complement : une liaison peut
@@ -1301,6 +1369,31 @@ BarWidget {
       anchors.right: parent.right
       anchors.rightMargin: Style.space(6)
       anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
+  component RateLabel: Row {
+    id: rate
+
+    property string glyph: ""
+    property color glyphColor: root.accentColor
+    property real value: 0
+
+    spacing: Style.space(4)
+
+    Text {
+      text: rate.glyph
+      color: rate.glyphColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+    }
+
+    Text {
+      text: root.formatRate(rate.value)
+      color: root.foregroundColor
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
     }
   }
 
