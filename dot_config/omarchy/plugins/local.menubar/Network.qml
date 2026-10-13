@@ -1043,7 +1043,7 @@ BarWidget {
 
           // ---- Debit ----
           // Repris du panneau de omarchy-system-monitor (Harshith Chennupati,
-          // MIT) : descente et montee ne s'additionnent jamais, la montee
+          // MIT, voir NOTICE) : descente et montee ne s'additionnent jamais, la montee
           // au-dessus de l'axe, la descente en dessous, sur une echelle commune.
           PanelIsland {
             visible: root.online

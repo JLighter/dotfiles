@@ -2,7 +2,7 @@
 //
 // Les fixtures reprennent le format exact de /proc, de `df -P -k -l -T` et de
 // `nvidia-smi --format=csv,noheader,nounits`. Les cas /proc et df viennent de
-// omarchy-system-monitor (Harshith Chennupati, MIT), d'ou le modele est porte.
+// omarchy-system-monitor (Harshith Chennupati, MIT, voir NOTICE), d'ou le modele est porte.
 
 const assert = require("node:assert/strict")
 const test = require("node:test")

@@ -1,6 +1,6 @@
 import QtQuick
 
-// Porte tel quel de omarchy-system-monitor (Harshith Chennupati, MIT),
+// Porte tel quel de omarchy-system-monitor (Harshith Chennupati, MIT, voir NOTICE),
 // Sparkline.qml au commit 71599f7.
 //
 // Rolling time-series plot with two shapes:

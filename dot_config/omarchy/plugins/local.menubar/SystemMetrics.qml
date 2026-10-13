@@ -8,7 +8,7 @@ import "SystemMetrics.js" as Model
 // sondes une fois au chargement, `df` une fois par minute panneau ouvert, et
 // nvidia-smi a chaque releve, la carte NVIDIA n'exposant rien dans /sys.
 //
-// Porte de omarchy-system-monitor (Harshith Chennupati, MIT), Metrics.qml au
+// Porte de omarchy-system-monitor (Harshith Chennupati, MIT, voir NOTICE), Metrics.qml au
 // commit 71599f7. Retires : capteurs Apple Silicon, ventilateurs et leur
 // pilotage par sudo (materiel absent ici), lecture GPU par sysfs, debit reseau
 // (le widget Network le mesure deja).

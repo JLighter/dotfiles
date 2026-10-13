@@ -9,7 +9,7 @@ import qs.Ui
 //
 // Le bouton de barre est celui de la menubar (puce, mesures au survol, halo
 // d'accent). Le panneau reprend celui de omarchy-system-monitor (Harshith
-// Chennupati, MIT, Panel.qml au commit 71599f7) : en-tete hote, tuiles CPU /
+// Chennupati, MIT, voir NOTICE ; Panel.qml au commit 71599f7) : en-tete hote, tuiles CPU /
 // memoire / temperature, tuiles GPU, historique deux minutes, charge par coeur,
 // debit disque, capacite, bouton btop. Ecarts a l'amont : GPU NVIDIA
 // via nvidia-smi (l'amont ne le lit pas), pas de capteurs ni de ventilateurs

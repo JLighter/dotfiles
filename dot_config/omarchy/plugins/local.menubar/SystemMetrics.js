@@ -4,7 +4,7 @@
 // fenetre d'historique (aussi utilisee par le graphe de debit du widget
 // Network). Rien ici ne touche a QML, donc tout se teste avec `node`.
 //
-// Porte de omarchy-system-monitor (Harshith Chennupati, MIT), Metrics.js au
+// Porte de omarchy-system-monitor (Harshith Chennupati, MIT, voir NOTICE), Metrics.js au
 // commit 71599f7. Retires : capteurs Apple Silicon et ventilateurs (materiel
 // absent ici), lecture GPU par sysfs (amdgpu/i915) au profit de nvidia-smi,
 // echappement de tooltip (le widget n'en a pas), lecture reseau (le debit vient

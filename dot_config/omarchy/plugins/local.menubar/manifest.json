@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "jlighter",
   "license": "MIT",
-  "description": "Barre minimale : workspaces au bord de depart, horloge au bord oppose",
+  "description": "Barre minimale : workspaces au bord de depart, horloge au bord oppose. Panneau System repris de omarchy-system-monitor (MIT, voir NOTICE)",
   "kinds": ["bar"],
   "entryPoints": { "bar": "Bar.qml" }
 }

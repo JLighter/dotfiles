@@ -9,7 +9,7 @@
 #   disk      <peripherique bloc physique>   (une ligne par disque)
 #   gpu_smi   <chemin de nvidia-smi>         (absent sans pilote NVIDIA)
 #
-# Porte de omarchy-system-monitor (Harshith Chennupati, MIT),
+# Porte de omarchy-system-monitor (Harshith Chennupati, MIT, voir NOTICE),
 # discover-sensors.sh au commit 71599f7, sans les capteurs Apple Silicon ni la
 # decouverte GPU sysfs : la carte NVIDIA de cette machine n'expose rien dans
 # /sys, elle passe par nvidia-smi.
