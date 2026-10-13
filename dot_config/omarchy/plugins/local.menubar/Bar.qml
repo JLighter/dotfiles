@@ -350,11 +350,7 @@ Item {
                 Cliamp { bar: root }
               }
 
-              Island { System { bar: root } }
-
               Island { ClaudeUsage { bar: root } }
-
-              Island { Notifications { bar: root } }
 
               Island { Tapo { bar: root } }
 
@@ -367,17 +363,22 @@ Item {
                 WireGuard { id: wireguardWidget; bar: root }
               }
 
-              // Ecrans, reseau et son partagent une seule pastille : ce sont
-              // trois reglages systeme voisins, et la jauge de volume s'y deplie.
+              // Ecrans, charge systeme, reseau, son et notifications partagent
+              // une seule pastille, au bord droit : la jauge de volume comme les
+              // mesures systeme s'y deplient.
               Island {
                 Row {
                   spacing: 0
 
                   Displays { bar: root }
 
+                  System { bar: root }
+
                   Network { bar: root }
 
                   Audio { bar: root }
+
+                  Notifications { bar: root }
                 }
               }
             }
@@ -428,11 +429,7 @@ Item {
                 Cliamp { bar: root }
               }
 
-              Island { System { bar: root } }
-
               Island { ClaudeUsage { bar: root } }
-
-              Island { Notifications { bar: root } }
 
               Island { Tapo { bar: root } }
 
@@ -448,9 +445,13 @@ Item {
 
                   Displays { bar: root }
 
+                  System { bar: root }
+
                   Network { bar: root }
 
                   Audio { bar: root }
+
+                  Notifications { bar: root }
                 }
               }
             }
