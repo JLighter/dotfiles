@@ -107,7 +107,20 @@ Item {
 
   // Shared application engine (entries, hidden filters, icons, launch,
   // removal), owned by the shell and also used by the standalone launcher.
-  readonly property var appLibrary: root.shell ? root.shell.appLibrary : null
+  // Repli : Omarchy 4.0.4/4.0.5 donne appLibrary null aux menus tiers
+  // (omacom/omarchy#15360, correctif #15692). On charge alors la copie locale
+  // d'AppLibrary ; des que l'hote la fournit, la copie n'est plus chargee.
+  // Ne pas attendre shell pour charger la copie : constate le 2026-10-18 sous
+  // 4.0.5, shell vaut encore null quand le menu s'ouvre, et la liste resterait
+  // vide.
+  readonly property var hostAppLibrary: root.shell ? root.shell.appLibrary : null
+  readonly property var appLibrary: hostAppLibrary || localAppLibrary.item
+
+  Loader {
+    id: localAppLibrary
+    active: !root.hostAppLibrary
+    sourceComponent: AppLibrary { }
+  }
   property bool deleteConfirmOpen: false
   property var deleteTarget: null
   onOpenedChanged: if (!opened) { deleteConfirmOpen = false; deleteTarget = null }

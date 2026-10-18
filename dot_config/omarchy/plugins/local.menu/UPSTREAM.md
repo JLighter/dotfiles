@@ -84,6 +84,53 @@ l'instant que renommer le filet du clone. Toute règle plus fine doit trier les
 lignes dans le même mouvement — `ListView` ne regroupe que les lignes
 consécutives de même valeur.
 
+### Couche 3 — repli temporaire de la bibliothèque d'apps
+
+Ajoutée le 2026-10-18, contre Omarchy `4.0.5`. À retirer dès que l'amont
+corrige le bug.
+
+Omarchy 4.0.4 et 4.0.5 donnent `appLibrary: null` aux menus tiers :
+`manifestHasKind` teste `Array.isArray(manifest.kinds)`, faux pour un manifeste
+passé par le modèle des panneaux (omacom/omarchy#15360, #14761, #15851). La liste
+Apps reste alors vide. Le menu natif n'est pas touché : il reçoit le vrai
+`shell`.
+
+| Point | Natif | Ici |
+|---|---|---|
+| `appLibrary` | `root.shell.appLibrary` | celui de l'hôte, sinon la copie locale chargée par `localAppLibrary` |
+| `AppLibrary.qml`, `AppSearch.js` | `shell/services/` de l'hôte | copies conformes de la 4.0.5, sans retouche |
+
+Le `Loader` s'active dès que l'hôte ne fournit rien. Il ne doit pas attendre
+l'injection de `shell` : constaté sous 4.0.5, `shell` vaut encore `null` quand
+le menu s'ouvre, et la liste resterait vide. Une fois le correctif amont
+installé (PR omacom/omarchy#15692), la copie n'est plus chargée dès que `shell`
+porte la bibliothèque de l'hôte.
+
+`tests/omarchy-menu-applibrary.test.sh` surveille la couche : il échoue si une
+mise à jour d'Omarchy change `AppLibrary.qml` ou `AppSearch.js` (les recopier),
+ou si l'hôte est corrigé (`shell.qml` n'appelle plus `Array.isArray(manifest.kinds)`
+et passe par `Util.manifestHasKind`) — c'est le signal de retrait.
+
+Pour retirer la couche, dans `Menu.qml` :
+
+1. supprimer le `Loader { id: localAppLibrary … }` et la propriété
+   `hostAppLibrary` ;
+2. rétablir `readonly property var appLibrary: root.shell ? root.shell.appLibrary : null` ;
+3. supprimer `AppLibrary.qml`, `AppSearch.js` et
+   `tests/omarchy-menu-applibrary.test.sh`.
+
+Supprimer les copies sans le `Loader` casse tout le menu : le type
+`AppLibrary` n'existerait plus.
+
+Pour vérifier à l'exécution, ouvrir d'abord le sous-menu Apps (les lignes ne
+sont fusionnées qu'à ce moment), puis comparer une entrée visible à une entrée
+masquée. `item` renvoie `[object Object]` pour une ligne existante, `ok` sinon :
+
+```bash
+omarchy-shell shell call local.menu item apps.chromium                      # [object Object]
+omarchy-shell shell call local.menu item apps.nautilus-autorun-software     # ok (NoDisplay)
+```
+
 ### Ce que cette resynchro a rapporté
 
 - Désinstallation d'une application depuis le menu (`requestDeleteSelected`,
