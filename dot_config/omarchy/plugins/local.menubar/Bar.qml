@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Barre de statut minimale : un switcher de workspaces au bord de depart, une
@@ -93,10 +94,10 @@ Item {
   // les plugins qui s'ancrent sur la barre : le service de notifications lit
   // barSize/barHidden pour ne pas afficher ses popups sous la barre.
   property string fontFamily: Style.font.family
-  property color background: Color.bar.background
-  property color foreground: Color.bar.text
+  property color background: Commons.Color.bar.background
+  property color foreground: Commons.Color.bar.text
   property color barForeground: foreground
-  property color urgent: Color.bar.active
+  property color urgent: Commons.Color.bar.active
   property bool foregroundAnimationEnabled: true
   property bool barHidden: false
 
@@ -507,8 +508,8 @@ Item {
 
             implicitWidth: tooltipLabel.implicitWidth + Style.space(20)
             implicitHeight: tooltipLabel.implicitHeight + Style.space(14)
-            color: Color.tooltip.background
-            borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+            color: Commons.Color.tooltip.background
+            borderSpec: Border.surfaceSpec("tooltip", "border", Commons.Color.tooltip.border, 1)
             radius: Style.cornerRadius
 
             Text {
@@ -516,7 +517,7 @@ Item {
 
               anchors.centerIn: parent
               text: root.tooltipText
-              color: Color.tooltip.text
+              color: Commons.Color.tooltip.text
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               horizontalAlignment: Text.AlignHCenter

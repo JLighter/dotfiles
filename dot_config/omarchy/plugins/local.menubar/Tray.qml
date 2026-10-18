@@ -4,6 +4,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Services.SystemTray
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Applications en arriere-plan : les icones que les programmes deposent dans le
@@ -27,11 +28,11 @@ BarWidget {
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
   readonly property int revealEasing: Easing.OutCubic
 
-  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property color accentColor: bar ? bar.accent : Commons.Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
   readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
   readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
-  readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
+  readonly property color foregroundColor: bar ? bar.foreground : Commons.Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color islandFill: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.06)

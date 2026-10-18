@@ -4,6 +4,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Effects
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "MenuModel.js" as MenuModel
 
@@ -116,11 +117,11 @@ Item {
   // Palette prise a [bar] et non a [menu] : le menu est une surface de la barre,
   // il en porte le fond et l'encre. Le scrim, lui, reste celui du menu — c'est
   // le voile pose sur le bureau, pas une couleur de la barre.
-  property color background: Color.bar.background
-  property color foreground: Color.bar.text
-  property color accent: Color.bar.active
+  property color background: Commons.Color.bar.background
+  property color foreground: Commons.Color.bar.text
+  property color accent: Commons.Color.bar.active
   property real accentFillOpacity: 0.18
-  property color scrim: Color.menu.scrim
+  property color scrim: Commons.Color.menu.scrim
 
   // Encre secondaire, remplissage d'ilot et halo d'accent : les trois teintes
   // que tous les panneaux de la barre derivent de leur encre.

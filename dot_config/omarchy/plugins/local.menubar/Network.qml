@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Networking
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "SystemMetrics.js" as SystemModel
 
@@ -28,13 +29,13 @@ BarWidget {
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
   readonly property int revealEasing: Easing.OutCubic
 
-  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property color accentColor: bar ? bar.accent : Commons.Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
   // Debordement du halo, pour qu'il epouse les bords de l'ilot au lieu d'en
   // laisser voir un liseré tout autour.
   readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
   readonly property int haloInsetY: bar && bar.islandPaddingY !== undefined ? bar.islandPaddingY : 0
-  readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
+  readonly property color foregroundColor: bar ? bar.foreground : Commons.Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color islandFill: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.06)

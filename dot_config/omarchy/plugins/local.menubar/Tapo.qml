@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Ampoules TP-Link Tapo, pilotees en local (protocole KLAP, sans cloud).
@@ -28,11 +29,11 @@ BarWidget {
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
   readonly property int revealEasing: Easing.OutCubic
 
-  readonly property color accentColor: bar ? bar.accent : Color.accent
+  readonly property color accentColor: bar ? bar.accent : Commons.Color.accent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
-  readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
+  readonly property color foregroundColor: bar ? bar.foreground : Commons.Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
-  readonly property color urgentColor: bar && bar.urgent !== undefined ? bar.urgent : Color.urgent
+  readonly property color urgentColor: bar && bar.urgent !== undefined ? bar.urgent : Commons.Color.urgent
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color islandFill: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.06)
   readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
@@ -174,7 +175,7 @@ BarWidget {
   // Le singleton Color est reassigne a chaque changement de theme. S'y lier
   // vaut abonnement : pas de surveillance de fichier ni de sondage a ecrire,
   // et la pastille se repeint en meme temps que le reste du shell.
-  readonly property color themeWitness: Color.accent
+  readonly property color themeWitness: Commons.Color.accent
 
   onThemeWitnessChanged: {
     loadPalette()

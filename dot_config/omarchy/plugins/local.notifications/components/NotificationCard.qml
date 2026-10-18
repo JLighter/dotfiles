@@ -14,6 +14,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Rectangle {
@@ -32,9 +33,9 @@ Rectangle {
 
   // --- Contrat de style, injecte par le conteneur -----------------------------
   property string fontFamily: Style.font.family
-  property color surfaceColor: Color.bar.background
-  property color textColor: Color.bar.text
-  property color accentColor: Color.bar.active
+  property color surfaceColor: Commons.Color.bar.background
+  property color textColor: Commons.Color.bar.text
+  property color accentColor: Commons.Color.bar.active
   property real accentFillOpacity: 0.18
   property int revealDuration: 180
   property int revealEasing: Easing.OutCubic

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Widget de charge systeme : CPU et memoire dans la barre, tableau de bord au clic.
@@ -28,9 +29,9 @@ BarWidget {
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
   readonly property int revealEasing: Easing.OutCubic
 
-  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property color accentColor: bar ? bar.accent : Commons.Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
-  readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
+  readonly property color foregroundColor: bar ? bar.foreground : Commons.Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color islandFill: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.06)
@@ -40,7 +41,7 @@ BarWidget {
   // Teintes du panneau. L'accent porte les mesures, sa version assombrie la
   // seconde serie d'un graphe ; l'avertissement est un melange accent/urgent,
   // la palette n'ayant pas de role « warning » propre.
-  readonly property color urgentColor: Color.urgent
+  readonly property color urgentColor: Commons.Color.urgent
   readonly property color secondaryColor: Qt.darker(accentColor, 1.5)
   readonly property color warningColor: Qt.tint(accentColor, Qt.rgba(urgentColor.r, urgentColor.g, urgentColor.b, 0.6))
   readonly property color trackColor: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.12)

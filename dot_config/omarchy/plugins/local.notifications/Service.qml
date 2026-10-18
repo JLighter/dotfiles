@@ -44,6 +44,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 
 import "components"
 
@@ -81,13 +82,13 @@ Item {
   readonly property string barFontFamily: barItem && barItem.fontFamily
     ? barItem.fontFamily : Style.font.family
   readonly property color surfaceColor: barItem && barItem.background !== undefined
-    ? barItem.background : Color.bar.background
+    ? barItem.background : Commons.Color.bar.background
   readonly property color textColor: barItem && barItem.foreground !== undefined
-    ? barItem.foreground : Color.bar.text
+    ? barItem.foreground : Commons.Color.bar.text
   readonly property color accentColor: {
     if (barItem && barItem.accent !== undefined) return barItem.accent
     if (barItem && barItem.urgent !== undefined) return barItem.urgent
-    return Color.bar.active
+    return Commons.Color.bar.active
   }
   readonly property real accentFillOpacity: barItem && barItem.accentFillOpacity !== undefined
     ? barItem.accentFillOpacity : 0.18

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Widget d'ecrans autonome : glyphe dans la barre, panneau complet au clic.
@@ -25,7 +26,7 @@ BarWidget {
 
   // Accent porte par tout ce qui est actif, survole ou en mouvement — la teinte
   // du workspace courant.
-  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property color accentColor: bar ? bar.accent : Commons.Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
   // Debordement du halo, pour qu'il epouse les bords de l'ilot au lieu d'en
   // laisser voir un lisere tout autour.
@@ -887,7 +888,7 @@ BarWidget {
 
   // --- Couleurs et composants internes ---------------------------------------
 
-  readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
+  readonly property color foregroundColor: bar ? bar.foreground : Commons.Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   // Voile tire du texte plutot qu'une couleur fixe : l'ilot se detache aussi
@@ -1223,8 +1224,8 @@ BarWidget {
       implicitWidth: primaryHintLabel.implicitWidth + Style.space(16)
       implicitHeight: primaryHintLabel.implicitHeight + Style.space(8)
       radius: Style.cornerRadius
-      color: Color.tooltip.background
-      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, 1)
+      color: Commons.Color.tooltip.background
+      borderSpec: Border.surfaceSpec("tooltip", "border", Commons.Color.tooltip.border, 1)
       opacity: primaryHover.hovered ? 1 : 0
       visible: opacity > 0
 
@@ -1241,7 +1242,7 @@ BarWidget {
           if (!displayRow.isEnabled) return "Turn this screen on first"
           return "Move the full menubar here"
         }
-        color: Color.tooltip.text
+        color: Commons.Color.tooltip.text
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }

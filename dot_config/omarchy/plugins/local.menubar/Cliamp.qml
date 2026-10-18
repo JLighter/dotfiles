@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "CliampModel.js" as Model
 
@@ -38,9 +39,9 @@ BarWidget {
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
   readonly property int revealEasing: Easing.OutCubic
 
-  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property color accentColor: bar ? bar.accent : Commons.Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
-  readonly property color foregroundColor: bar ? bar.foreground : Color.foreground
+  readonly property color foregroundColor: bar ? bar.foreground : Commons.Color.foreground
   readonly property color mutedColor: Qt.darker(foregroundColor, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color islandFill: Qt.rgba(foregroundColor.r, foregroundColor.g, foregroundColor.b, 0.06)
@@ -949,7 +950,7 @@ BarWidget {
                   width: parent.width
                   height: Math.max(3, Style.space(4))
                   radius: height / 2
-                  color: root.bar ? Style.selectedFillFor(root.bar.foreground, Color.accent) : Color.muted
+                  color: root.bar ? Style.selectedFillFor(root.bar.foreground, Commons.Color.accent) : Commons.Color.muted
                   anchors.verticalCenter: parent.verticalCenter
 
                   Rectangle {

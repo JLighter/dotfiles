@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "WorkspacesModel.js" as Model
 
@@ -32,7 +33,7 @@ BarWidget {
   // en plus l'air laisse entre les ilots et les bords de la surface.
   readonly property int islandSize: bar && bar.islandSize !== undefined ? bar.islandSize : barSize
 
-  readonly property color accentColor: bar ? bar.accent : Color.urgent
+  readonly property color accentColor: bar ? bar.accent : Commons.Color.urgent
   readonly property real accentFillOpacity: bar && bar.accentFillOpacity !== undefined ? bar.accentFillOpacity : 0.18
   readonly property int revealDuration: bar && bar.revealDuration !== undefined ? bar.revealDuration : 180
   readonly property int haloInsetX: bar && bar.islandPaddingX !== undefined ? bar.islandPaddingX : 0
@@ -223,7 +224,7 @@ BarWidget {
           // quand le workspace est urgent. La distinction tient à la forme et
           // non à la teinte, donc elle reste lisible sur un thème où
           // `bar.active` et `urgent` se confondent.
-          color: workspaceButton.urgent ? Color.urgent : root.accentColor
+          color: workspaceButton.urgent ? Commons.Color.urgent : root.accentColor
           opacity: workspaceButton.urgent ? 1 : (workspaceButton.tooltipHovered ? root.accentFillOpacity : 0)
 
           Behavior on opacity {
@@ -261,8 +262,8 @@ BarWidget {
           // Urgent = pastille pleine, et le texte passe alors sur le fond de la
           // barre : la couleur d'accent s'y perdrait.
           active: current && !urgent
-          foreground: urgent ? Color.bar.background
-                             : (root.bar ? root.bar.barForeground : Color.foreground)
+          foreground: urgent ? Commons.Color.bar.background
+                             : (root.bar ? root.bar.barForeground : Commons.Color.foreground)
           opacity: occupied || current || urgent ? 1 : 0.4
           // Un id hors tranche peut s'ecrire en plusieurs kanji (十一) : la
           // pastille s'elargit alors plutot que de deborder sur sa voisine.
