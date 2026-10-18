@@ -7,6 +7,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "SystemMetrics.js" as SystemModel
+import "NetworkThroughput.js" as Throughput
 
 // Widget reseau autonome : etat de la connexion dans la barre, panneau au clic.
 // Reimplementation de `omarchy.network` — memes gestes et memes fonctions, sans
@@ -75,15 +76,12 @@ BarWidget {
 
   property string dnsProvider: ""
 
-  // Debits : deltas entre deux releves. On garde l'instant du releve precedent
-  // pour que le premier echantillon apres une ouverture ou un changement
-  // d'interface ne fabrique pas un pic.
-  property real prevRxBytes: 0
-  property real prevTxBytes: 0
-  property real prevSampleTime: 0
-  property string prevIface: ""
-  property real downloadRate: 0
-  property real uploadRate: 0
+  // Debits : ecart entre deux lectures de /proc/net/dev, datees au moment de
+  // la lecture (voir NetworkThroughput.js). -1 tant qu'aucun ecart n'a ete
+  // mesure : l'affichage montre un tiret plutot qu'un faux « 0 B/s ».
+  property var throughputSnapshot: null
+  property real downloadRate: -1
+  property real uploadRate: -1
 
   // Deux minutes de debits pour le graphe miroir de l'ilot NET. Les deux
   // moities partagent une echelle : le pic se prend sur la paire, et l'en-tete
@@ -105,43 +103,35 @@ BarWidget {
 
   function updateDetails(raw) {
     var next = parseKeyValue(raw)
-    var iface = String(next.iface || "")
-    var now = Date.now() / 1000
-    var rx = Number(next.rx_bytes || 0)
-    var tx = Number(next.tx_bytes || 0)
-
-    // Un changement d'interface repart de zero : comparer les compteurs de deux
-    // cartes differentes donnerait un debit absurde.
-    if (iface === prevIface && prevSampleTime > 0) {
-      var elapsed = now - prevSampleTime
-      if (elapsed > 0.2) {
-        downloadRate = Math.max(0, (rx - prevRxBytes) / elapsed)
-        uploadRate = Math.max(0, (tx - prevTxBytes) / elapsed)
-        downloadHistory = SystemModel.appendHistory(downloadHistory, now * 1000, downloadRate)
-        uploadHistory = SystemModel.appendHistory(uploadHistory, now * 1000, uploadRate)
-      }
-    } else {
-      downloadRate = 0
-      uploadRate = 0
-      downloadHistory = []
-      uploadHistory = []
-    }
-
     var type = String(next.type || "")
     appendPingSample(next.internet_ping_ms, type === "wifi" || type === "ethernet")
-
-    prevIface = iface
-    prevRxBytes = rx
-    prevTxBytes = tx
-    prevSampleTime = now
     info = next
   }
 
+  // L'interface vient du dernier statut ; les compteurs, de la lecture qui
+  // vient d'aboutir, datee maintenant.
+  function updateThroughput(raw) {
+    var iface = String(info.iface || "")
+    var step = Throughput.nextThroughput(throughputSnapshot,
+                                         Throughput.parseNetDev(raw, iface),
+                                         iface, Date.now())
+    throughputSnapshot = step.snapshot
+    if (step.reset) {
+      downloadRate = -1
+      uploadRate = -1
+      downloadHistory = []
+      uploadHistory = []
+    }
+    if (!step.rates) return
+
+    downloadRate = step.rates.down
+    uploadRate = step.rates.up
+    downloadHistory = SystemModel.appendHistory(downloadHistory, step.snapshot.time, downloadRate)
+    uploadHistory = SystemModel.appendHistory(uploadHistory, step.snapshot.time, uploadRate)
+  }
+
   function formatRate(bytesPerSec) {
-    var value = Number(bytesPerSec || 0)
-    if (value < 1024) return Math.round(value) + " B/s"
-    if (value < 1024 * 1024) return (value / 1024).toFixed(value < 10240 ? 1 : 0) + " kB/s"
-    return (value / (1024 * 1024)).toFixed(1) + " MB/s"
+    return Throughput.formatRate(bytesPerSec)
   }
 
   function formatPing(raw) {
@@ -220,6 +210,14 @@ BarWidget {
   }
 
   Process { id: actionProc }
+
+  FileView {
+    id: netDevFile
+    path: "/proc/net/dev"
+    watchChanges: false
+    printErrors: false
+    onLoaded: root.updateThroughput(text())
+  }
 
   // --- Bande Wi-Fi -----------------------------------------------------------
   // `omarchy-network-band` sans argument rend son etat sous la meme forme
@@ -343,6 +341,7 @@ BarWidget {
 
   function refresh(scanWifi) {
     if (!detailsProc.running) detailsProc.running = true
+    netDevFile.reload()
     if (!dnsProc.running) dnsProc.running = true
 
     // La bande ne bouge qu'a la reassociation, et la relire coute un aller-retour
@@ -1378,7 +1377,7 @@ BarWidget {
 
     property string glyph: ""
     property color glyphColor: root.accentColor
-    property real value: 0
+    property real value: -1
 
     spacing: Style.space(4)
 
