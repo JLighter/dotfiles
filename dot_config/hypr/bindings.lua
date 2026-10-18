@@ -16,6 +16,13 @@ hl.unbind("SUPER + SHIFT + W")
 o.bind("SUPER + SHIFT + W", "Typora", { launch = "typora --enable-wayland-ime" })
 
 -- ══════════════════════════════════════════════════════════════════════════════
+-- Fermeture de fenêtre au CMD+Q, en plus de SUPER+W
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Le canal edge l'avait par défaut (omacom/omarchy#7767), la 4.0.5 stable non :
+-- le geste du Mac disparaissait au passage en stable.
+o.bind("SUPER + Q", "Close window", hl.dsp.window.close())
+
+-- ══════════════════════════════════════════════════════════════════════════════
 -- Focus au hjkl, en plus des flèches
 -- ══════════════════════════════════════════════════════════════════════════════
 -- Même modèle mental que la couche mux : ctrl+h/j/k/l chez herdr et Neovim.
