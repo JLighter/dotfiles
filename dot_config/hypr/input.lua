@@ -5,9 +5,9 @@
 -- See https://wiki.hypr.land/Configuring/Basics/Variables/#input
 hl.config({
   input = {
---     -- Use multiple keyboard layouts and switch between them with Left Alt + Right Alt.
+    -- Pas de grp:alts_toggle : il retire à Alt droit son rôle de niveau 3 ({, }, [, ]…).
     kb_layout = "fr",
-    kb_options = "compose:caps,grp:alts_toggle",
+    kb_options = "compose:caps",
 --
 --     -- Use a specific keyboard variant if needed (e.g. intl for international keyboards).
     kb_variant = "mac",
@@ -19,8 +19,8 @@ hl.config({
 --     -- Start with numlock on by default.
 --     numlock_by_default = true,
 --
---     -- Increase sensitivity for mouse/trackpad (default: 0).
---     sensitivity = 0.35,
+    -- Reduce sensitivity for mouse/trackpad (default: 0).
+    sensitivity = -0.75,
 --
 --     -- Turn off mouse acceleration (default: adaptive).
 --     accel_profile = "flat",
